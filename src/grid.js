@@ -104,6 +104,9 @@ export function iconoPorAccion(accion) {
       return ICONOS.pestanas;
     case "system":
       return ICONOS[ICONOS_SISTEMA.get(accion.command)] ?? ICONOS.ventanas;
+    case "unknown":
+      // De una version mas nueva: se ve que pasa algo, y pulsarla lo explica.
+      return ICONOS.aviso;
     case "app":
     default:
       return ICONOS.app;

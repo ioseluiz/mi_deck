@@ -83,7 +83,8 @@ fn destino_para_icono(action: &Action) -> Option<PathBuf> {
         | Action::Folder { .. }
         | Action::Hotkey { .. }
         | Action::Text { .. }
-        | Action::System { .. } => return None,
+        | Action::System { .. }
+        | Action::Unknown { .. } => return None,
     };
 
     let expandido = launcher::expand_env(crudo);

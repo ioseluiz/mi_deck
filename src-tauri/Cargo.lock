@@ -2478,7 +2478,7 @@ dependencies = [
 
 [[package]]
 name = "mideck"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "image",
  "serde",

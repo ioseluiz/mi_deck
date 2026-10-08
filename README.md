@@ -408,6 +408,20 @@ del dominio sobre un color derivado del propio dominio. El widget no toca la red
 jamás, lo que lo hace inmune al proxy institucional y a trabajar sin conexión. Si
 quieres el logo real, impórtalo como imagen.
 
+### Un tipo de acción que esta versión no conoce
+
+Si `deck.json` trae una acción de una versión más nueva, **no se da el archivo
+por corrupto**. Esa tecla se conserva tal cual bajo `{"type": "unknown",
+"__original": {…}}`, sale en el panel con un triángulo de aviso y, al pulsarla,
+dice de qué tipo es y que hay que actualizar. Al volver a una versión que sí lo
+entienda, la tecla se recupera sola.
+
+Hace falta porque sin ello una sola tecla incomprensible invalidaba el archivo
+entero: se respaldaba y se arrancaba de cero, y el usuario veía que había perdido
+las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
+publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
+`urls` o `system` sigue siendo destructivo.
+
 ## Seguridad
 
 `deck.json` es texto plano y las acciones de tipo `script` ejecutan lo que contengan

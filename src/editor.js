@@ -226,6 +226,31 @@ function sincronizarListaApps() {
   sel.value = coincide ? actual : "";
 }
 
+/**
+ * Deja el formulario utilizable cuando la tecla viene de una version mas nueva.
+ *
+ * Sin la opcion en el desplegable, el `<select>` se quedaria sin valor y lo
+ * siguiente que escribiera el usuario convertiria la tecla en una aplicacion
+ * vacia, perdiendo una accion que esta version ni siquiera sabe reconstruir.
+ */
+function prepararDesconocida(tipo, accion) {
+  if (tipo !== "unknown") return;
+  const sel = $("ed-tipo");
+  if (!Array.from(sel.options).some((o) => o.value === "unknown")) {
+    const op = document.createElement("option");
+    op.value = "unknown";
+    op.textContent = "Acción de una versión más nueva";
+    sel.appendChild(op);
+  }
+  sel.value = "unknown";
+
+  const original = accion?.__original?.type;
+  $("ed-unknown-nota").textContent = original
+    ? `Esta tecla es de tipo "${original}", que esta versión de MiDeck no conoce. ` +
+      "Actualiza para poder usarla."
+    : "Esta tecla tiene una acción que esta versión de MiDeck no conoce.";
+}
+
 /** Muestra solo el grupo de campos del tipo de accion elegido. */
 function mostrarGrupo(tipo) {
   for (const g of document.querySelectorAll("[data-tipo]")) {
@@ -256,6 +281,7 @@ function volcarEnFormulario() {
 
   if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
   mostrarAvisoSistema();
+  prepararDesconocida(tipo, a);
   sincronizarListaApps();
 
   $("ed-path-target").value = tipo === "path" ? a.target ?? "" : "";
@@ -317,6 +343,11 @@ function leerFormulario() {
       break;
     case "system":
       tecla.action = { type: "system", command: $("ed-system-command").value };
+      break;
+    case "unknown":
+      // A proposito no se toca `tecla.action`: sigue siendo el objeto original
+      // que mando Rust, asi que guardar la etiqueta o la cara no destruye una
+      // accion que esta version no sabe reconstruir.
       break;
     case "path":
       tecla.action = { type: "path", target: $("ed-path-target").value.trim() };
@@ -533,6 +564,7 @@ function dominioDe(url) {
 /** Si el usuario no puso etiqueta, deducir una del destino. */
 function etiquetaPorDefecto(action) {
   if (action.type === "hotkey") return action.keys ?? "Atajo";
+  if (action.type === "unknown") return "Sin reconocer";
   if (action.type === "system") {
     return fichaSistema(action.command)?.etiqueta ?? "Acción de Windows";
   }

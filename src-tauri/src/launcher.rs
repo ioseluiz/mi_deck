@@ -426,6 +426,20 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             })
         }
 
+        // Una tecla de una version mas nueva. No se ejecuta, pero tampoco se
+        // pierde: sigue guardada tal cual vino.
+        Action::Unknown { .. } => Err(LaunchError::Invalid {
+            motivo: match action.tipo_original() {
+                Some(t) => format!(
+                    "Esta tecla es de tipo \"{t}\", que esta version de MiDeck no \
+                     conoce. Se guardo tal cual: actualiza para poder usarla."
+                ),
+                None => "Esta tecla tiene una accion que esta version de MiDeck no \
+                         conoce. Se guardo tal cual."
+                    .to_string(),
+            },
+        }),
+
         Action::System { command } => {
             use crate::sistema::Mecanismo;
             let ficha = crate::sistema::info(*command).ok_or_else(|| LaunchError::Invalid {

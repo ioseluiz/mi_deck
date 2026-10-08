@@ -160,6 +160,7 @@ pub struct DeckButton {
     pub label: String,
     #[serde(default)]
     pub icon: Icon,
+    #[serde(deserialize_with = "accion_tolerante")]
     pub action: Action,
 }
 
@@ -301,10 +302,146 @@ pub enum Action {
     System {
         command: crate::sistema::SystemCommand,
     },
+
+    /// Un tipo de accion que esta version no conoce.
+    ///
+    /// Es la red de seguridad para volver a una version anterior. Sin ella, un
+    /// `deck.json` escrito por una version mas nueva no encaja con el formato, se
+    /// da por corrupto, se respalda y el usuario ve que ha perdido sus teclas
+    /// enteras por una sola que no se entendia.
+    ///
+    /// Se guarda el objeto original tal cual, bajo una clave aparte para no
+    /// chocar con la etiqueta `type`, de modo que al volver a una version que si
+    /// lo entienda la tecla reaparezca intacta.
+    Unknown {
+        #[serde(rename = "__original")]
+        raw: serde_json::Map<String, serde_json::Value>,
+    },
+}
+
+/// Lee una accion sin que una desconocida invalide el archivo entero.
+///
+/// Tres casos:
+///   - se entiende: tal cual;
+///   - es un envoltorio dejado por una version anterior y ahora **si** se
+///     entiende: se recupera, que es lo que hace util guardar el original;
+///   - no se entiende: se envuelve y se conserva byte a byte.
+fn accion_tolerante<'de, D>(d: D) -> Result<Action, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let valor = serde_json::Value::deserialize(d)?;
+
+    match serde_json::from_value::<Action>(valor.clone()) {
+        Ok(Action::Unknown { raw }) => {
+            let interior = serde_json::Value::Object(raw.clone());
+            match serde_json::from_value::<Action>(interior) {
+                // Ojo con el envoltorio anidado: si el interior tampoco se
+                // entiende, se deja el de fuera y no se envuelve otra vez.
+                Ok(Action::Unknown { .. }) | Err(_) => Ok(Action::Unknown { raw }),
+                Ok(recuperada) => Ok(recuperada),
+            }
+        }
+        Ok(conocida) => Ok(conocida),
+        Err(_) => Ok(Action::Unknown {
+            raw: match valor {
+                serde_json::Value::Object(m) => m,
+                otro => {
+                    // Ni siquiera es un objeto. Se envuelve igual: perder la
+                    // tecla es peor que arrastrar un valor raro.
+                    let mut m = serde_json::Map::new();
+                    m.insert("__valor".to_string(), otro);
+                    m
+                }
+            },
+        }),
+    }
 }
 
 fn default_browser() -> String {
     "default".to_string()
+}
+
+#[cfg(test)]
+mod tests_tolerancia {
+    use super::*;
+
+    fn boton(accion: &str) -> String {
+        format!(r#"{{"id":"b1","position":0,"label":"X","action":{accion}}}"#)
+    }
+
+    fn leer(accion: &str) -> DeckButton {
+        serde_json::from_str(&boton(accion)).expect("el boton deberia leerse")
+    }
+
+    #[test]
+    fn una_accion_conocida_se_lee_como_siempre() {
+        let b = leer(r#"{"type":"path","target":"C:\\Datos"}"#);
+        assert_eq!(b.action.kind(), "path");
+    }
+
+    /// El caso que motiva todo esto: una version anterior abriendo un archivo
+    /// escrito por una mas nueva. Antes, esto tumbaba el deck entero.
+    #[test]
+    fn un_tipo_desconocido_no_invalida_el_boton() {
+        let b = leer(r#"{"type":"capture_window","destino":"portapapeles"}"#);
+        assert_eq!(b.action.kind(), "unknown");
+        assert_eq!(b.action.tipo_original(), Some("capture_window"));
+    }
+
+    #[test]
+    fn un_tipo_desconocido_no_invalida_el_deck_entero() {
+        // Lo importante no es la tecla rara: es que las otras sobrevivan.
+        let json = format!(
+            r#"{{"version":1,"root":"r","surfaces":{{"r":{{"name":"Raiz","pages":[{{"buttons":[{},{}]}}]}}}}}}"#,
+            boton(r#"{"type":"del_futuro","x":1}"#),
+            boton(r#"{"type":"url","target":"https://a","browser":"default"}"#)
+        );
+        let deck: Deck = serde_json::from_str(&json).expect("el deck deberia leerse");
+        let botones = &deck.surfaces["r"].pages[0].buttons;
+        assert_eq!(botones.len(), 2);
+        assert_eq!(botones[0].action.kind(), "unknown");
+        assert_eq!(botones[1].action.kind(), "url");
+    }
+
+    /// Guardar no puede ser la forma de perder la tecla: lo que no se entiende
+    /// tiene que volver al archivo tal y como entro.
+    #[test]
+    fn lo_desconocido_sobrevive_a_una_vuelta_completa() {
+        let original = r#"{"type":"capture_window","destino":"portapapeles","n":7}"#;
+        let b = leer(original);
+        let guardado = serde_json::to_string(&b).unwrap();
+        let releido: DeckButton = serde_json::from_str(&guardado).unwrap();
+
+        let Action::Unknown { raw } = &releido.action else {
+            panic!("deberia seguir sin entenderse");
+        };
+        let esperado: serde_json::Value = serde_json::from_str(original).unwrap();
+        assert_eq!(serde_json::Value::Object(raw.clone()), esperado);
+    }
+
+    /// Y la otra mitad: al actualizar, la tecla tiene que volver a funcionar
+    /// sola, sin que nadie la reescriba a mano.
+    #[test]
+    fn al_actualizar_una_tecla_envuelta_se_recupera() {
+        // Lo que habria dejado en disco una version que no conocia `system`.
+        let envuelto = r#"{"type":"unknown","__original":{"type":"system","command":"volume_up"}}"#;
+        let b = leer(envuelto);
+        assert_eq!(b.action.kind(), "system");
+    }
+
+    #[test]
+    fn un_envoltorio_que_sigue_sin_entenderse_no_se_envuelve_dos_veces() {
+        let envuelto = r#"{"type":"unknown","__original":{"type":"aun_mas_nuevo","x":1}}"#;
+        let b = leer(envuelto);
+        assert_eq!(b.action.tipo_original(), Some("aun_mas_nuevo"));
+    }
+
+    #[test]
+    fn una_accion_que_ni_siquiera_es_un_objeto_no_tumba_nada() {
+        let b = leer(r#""una cadena suelta""#);
+        assert_eq!(b.action.kind(), "unknown");
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -328,6 +465,19 @@ impl Action {
             Action::Hotkey { .. } => "hotkey",
             Action::Text { .. } => "text",
             Action::System { .. } => "system",
+            Action::Unknown { .. } => "unknown",
+        }
+    }
+
+    /// Como se llamaba el tipo en el archivo, cuando no se entiende.
+    ///
+    /// Sirve para que el mensaje diga "esta tecla es de tipo capture_window" en
+    /// vez de un generico "accion desconocida", que no ayuda a nadie a saber que
+    /// version le falta.
+    pub fn tipo_original(&self) -> Option<&str> {
+        match self {
+            Action::Unknown { raw } => raw.get("type").and_then(|v| v.as_str()),
+            _ => None,
         }
     }
 }
