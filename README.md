@@ -114,12 +114,21 @@ cargo fmt -- --check
 | `Ctrl+Alt+Espacio` | Trae el panel al frente desde cualquier sitio |
 | Logo de GitHub en el pie | Abre el repositorio en el navegador |
 | Arrastrar la barra de título | Mueve el panel |
-| Cerrar con la X | Oculta a la bandeja; **no** sale |
+| Cerrar con la X | Oculta a la bandeja; **no** sale. En nivel escritorio no oculta: manda el panel al fondo, donde vive |
+| Volver a abrir el ejecutable | No arranca una segunda copia: trae al frente la que ya estaba |
 | Clic izquierdo en el ícono de bandeja | Muestra u oculta el panel |
 | Clic derecho en el ícono de bandeja | Menú: mostrar, siempre encima, abrir `deck.json`, iniciar con Windows, salir |
 
 Cerrar no termina la aplicación: es un widget, no una ventana de documento. Para
 salir de verdad, **Salir** en el menú de la bandeja.
+
+## Tamaño de la rejilla
+
+Columnas, filas y tamaño de tecla se configuran en Ajustes. **La ventana se ajusta
+sola** a lo que pida la rejilla: las medidas de la barra de título, el paginador y
+el pie se leen del DOM en vez de estar codificadas, para que un cambio de CSS no
+descuadre el cálculo. El resultado se limita al monitor actual, porque una ventana
+sin bordes más grande que la pantalla no se puede ni mover ni cerrar.
 
 ## Dónde vive el panel
 
@@ -130,6 +139,11 @@ Tres niveles, en Ajustes o con la chincheta de la barra de título:
 | **Siempre encima** (`top`) | Por encima de todas las ventanas. Siempre a mano, pero tapa lo que tengas debajo. |
 | **Ventana normal** (`normal`) | Entra y sale del frente como cualquier otra ventana. |
 | **Nivel escritorio** (`desktop`) | Sobre el fondo de pantalla, por debajo de todo. No estorba nunca: lo ves con `Win+D` o lo traes al frente con el atajo global. |
+
+Todas las vías de "mostrar el panel" —el atajo, el icono de bandeja y volver a
+lanzar el ejecutable— lo traen al frente de verdad. Sin esa excepción, en nivel
+escritorio el manejador de foco lo devolvía al fondo en el mismo instante y
+parecía que la aplicación no respondía.
 
 Windows no tiene una bandera "siempre debajo" equivalente a `WS_EX_TOPMOST`, así que
 el nivel escritorio se consigue empujando la ventana al fondo del orden z y

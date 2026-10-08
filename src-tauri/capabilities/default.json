@@ -2,7 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permisos de las ventanas de MiDeck. En Tauri 2 lo que no esta declarado aqui falla en tiempo de ejecucion, no de compilacion.",
-  "windows": ["main", "editor"],
+  "windows": [
+    "main",
+    "editor"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
@@ -19,6 +22,10 @@
     "opener:default",
     "dialog:allow-open",
     "clipboard-manager:allow-read-image",
-    "clipboard-manager:allow-read-text"
+    "clipboard-manager:allow-read-text",
+    "core:window:allow-set-size",
+    "core:window:allow-inner-size",
+    "core:window:allow-current-monitor",
+    "core:window:allow-scale-factor"
   ]
 }

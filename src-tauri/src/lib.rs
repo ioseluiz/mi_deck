@@ -763,10 +763,12 @@ fn close_editor(app: AppHandle) {
 
 fn alternar_ventana(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
+        nivel::marcar_al_frente(false);
         let _ = window.hide();
     } else {
-        let _ = window.show();
-        let _ = window.set_focus();
+        // Mismo motivo que al relanzar: mostrar sin marcarlo acaba con el panel
+        // al fondo del orden z y la sensacion de que no paso nada.
+        nivel::al_frente(window);
     }
 }
 
@@ -978,9 +980,12 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Volver a lanzar el ejecutable es la forma en que un usuario pide ver
+            // el panel. Tiene que venir al frente: con un show() a secas, en nivel
+            // escritorio el manejador de foco lo devolvia al fondo y parecia que
+            // la aplicacion no respondia.
             if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
+                nivel::al_frente(&w);
             }
         }));
     }
@@ -1092,7 +1097,21 @@ pub fn run() {
                 if window.label() == "main" {
                     api.prevent_close();
                     guardar_posicion(window);
-                    let _ = window.hide();
+
+                    // En nivel escritorio, ocultar seria quitarle al panel su
+                    // unica razon de ser: estar siempre en su sitio. Se manda al
+                    // fondo, que es donde vive, y asi la X nunca lo hace
+                    // "desaparecer" a ojos de quien lo usa.
+                    let state = window.state::<AppState>();
+                    let nivel_actual = state.deck.lock().unwrap().settings.window_level;
+                    nivel::marcar_al_frente(false);
+                    if nivel_actual == WindowLevel::Desktop {
+                        if let Some(w) = window.get_webview_window("main") {
+                            nivel::al_fondo(&w);
+                        }
+                    } else {
+                        let _ = window.hide();
+                    }
                 }
             }
         })

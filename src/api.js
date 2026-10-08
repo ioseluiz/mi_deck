@@ -42,6 +42,14 @@ export function invoke(comando, args) {
   return T.core.invoke(comando, args);
 }
 
+/**
+ * Modulo de ventana completo: hace falta para tipos como LogicalSize y para
+ * consultar el monitor actual, no solo para la ventana en si.
+ */
+export function ventanaApi() {
+  return T.window;
+}
+
 /** Ventana actual, para minimizar, cerrar o fijar encima. */
 export function ventana() {
   return T.window.getCurrentWindow();

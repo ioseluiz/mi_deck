@@ -12,6 +12,7 @@ import {
   apiDisponible,
   modulosDisponibles,
   urlDeArchivo,
+  ventanaApi,
 } from "./api.js";
 import { Nav } from "./nav.js";
 import { render, renderMigas } from "./grid.js";
@@ -31,6 +32,8 @@ const $toast = /** @type {HTMLElement} */ (document.getElementById("toast"));
 const $repo = /** @type {HTMLButtonElement} */ (document.getElementById("btn-repo"));
 const $lock = /** @type {HTMLButtonElement} */ (document.getElementById("btn-lock"));
 const $titlebar = /** @type {HTMLElement} */ (document.getElementById("titlebar"));
+const $panel = /** @type {HTMLElement} */ (document.getElementById("panel"));
+const $pie = /** @type {HTMLElement} */ (document.getElementById("pie"));
 
 /** @type {Nav | null} */
 let nav = null;
@@ -108,6 +111,66 @@ function aplicarAjustes(settings) {
   // ventana desde elementos que lo llevan.
   if (bloqueada) $titlebar.removeAttribute("data-tauri-drag-region");
   else $titlebar.setAttribute("data-tauri-drag-region", "");
+
+  // Tras pintar: la rejilla manda sobre el tamano de la ventana, no al reves.
+  requestAnimationFrame(() => ajustarTamanoVentana(settings));
+}
+
+/**
+ * Ajusta la ventana al tamano que pide la rejilla configurada.
+ *
+ * Sin esto, cambiar la rejilla a mas columnas de las que caben en una ventana de
+ * ancho fijo recortaba las teclas sobrantes: quedaban guardadas en deck.json pero
+ * invisibles e inalcanzables, que es peor que no dejar configurarla.
+ *
+ * Las medidas de la barra de titulo, el paginador y el pie se leen del DOM en vez
+ * de codificarlas aqui, para que un cambio de CSS no vuelva a descuadrarlo.
+ */
+async function ajustarTamanoVentana(settings) {
+  const cols = Math.max(1, settings.grid?.cols ?? 5);
+  const filas = Math.max(1, settings.grid?.rows ?? 3);
+  const lado = Math.max(32, settings.key_size ?? 96);
+
+  const estiloRejilla = getComputedStyle($grid);
+  const hueco = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hueco")) || 10;
+  const padX = parseFloat(estiloRejilla.paddingLeft) + parseFloat(estiloRejilla.paddingRight);
+  const padY = parseFloat(estiloRejilla.paddingTop) + parseFloat(estiloRejilla.paddingBottom);
+
+  // El panel lleva margen a los cuatro lados para que se vea su sombra.
+  const margen = parseFloat(getComputedStyle($panel).marginLeft) * 2;
+  const borde =
+    parseFloat(getComputedStyle($panel).borderLeftWidth) +
+    parseFloat(getComputedStyle($panel).borderRightWidth);
+
+  const ancho = cols * lado + (cols - 1) * hueco + padX + margen + borde;
+  const alto =
+    filas * lado +
+    (filas - 1) * hueco +
+    padY +
+    margen +
+    borde +
+    $titlebar.offsetHeight +
+    ($pager.hidden ? 0 : $pager.offsetHeight) +
+    $pie.offsetHeight;
+
+  try {
+    const { LogicalSize, currentMonitor } = ventanaApi();
+    // No crecer mas alla del monitor: una ventana sin bordes mas grande que la
+    // pantalla no se puede ni mover ni cerrar.
+    let maxAncho = Infinity;
+    let maxAlto = Infinity;
+    const m = await currentMonitor();
+    if (m) {
+      const escala = m.scaleFactor || 1;
+      maxAncho = m.size.width / escala;
+      maxAlto = m.size.height / escala - 48; // margen para la barra de tareas
+    }
+    await ventana().setSize(
+      new LogicalSize(Math.min(ancho, maxAncho), Math.min(alto, maxAlto))
+    );
+  } catch (err) {
+    console.warn("[MiDeck] no se pudo ajustar el tamaño de la ventana:", err);
+  }
 }
 
 // ----------------------------------------------------------------- navegacion

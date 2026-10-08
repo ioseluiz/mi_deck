@@ -12,8 +12,8 @@
       {
         "label": "main",
         "title": "MiDeck",
-        "width": 580,
-        "height": 500,
+        "width": 596,
+        "height": 509,
         "resizable": false,
         "decorations": false,
         "transparent": true,
