@@ -5,8 +5,33 @@
 //! carpeta) y un boton de tipo `folder` apunta a otra superficie por id. Mover una
 //! carpeta de sitio es cambiar una linea, no recortar y pegar un bloque anidado.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+
+/// Acepta tanto una lista como un elemento suelto.
+///
+/// PowerShell es la herramienta mas a mano para editar un JSON en Windows, y su
+/// `ConvertTo-Json` serializa una lista de un solo elemento como ese elemento,
+/// sin corchetes. Un deck.json que pase por ahi deja de encajar con el formato y
+/// el widget lo da por corrupto: lo respalda y arranca de cero. Tolerarlo aqui
+/// cuesta diez lineas y evita perder el trabajo por usar la herramienta obvia.
+fn uno_o_varios<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum UnoOVarios<T> {
+        Varios(Vec<T>),
+        Uno(Box<T>),
+    }
+
+    Ok(match UnoOVarios::<T>::deserialize(d)? {
+        UnoOVarios::Varios(v) => v,
+        UnoOVarios::Uno(u) => vec![*u],
+    })
+}
 
 /// Version del esquema de `deck.json`. Se incrementa al romper compatibilidad.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -107,7 +132,7 @@ pub struct WindowPos {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Surface {
     pub name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "uno_o_varios")]
     pub pages: Vec<Page>,
 }
 
@@ -122,7 +147,7 @@ impl Surface {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Page {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "uno_o_varios")]
     pub buttons: Vec<DeckButton>,
 }
 

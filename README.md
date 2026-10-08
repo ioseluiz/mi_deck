@@ -85,7 +85,7 @@ Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura
 ## Comprobaciones
 
 ```powershell
-cargo test                      # 77 pruebas: store, integridad, lanzador, imágenes, íconos, edición
+cargo test                      # 82 pruebas: store, integridad, lanzador, imágenes, íconos, edición
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
 ```
@@ -153,6 +153,10 @@ el widget no arranque.
 El guardado es atómico. Si el archivo se corrompe, se respalda como
 `deck.json.bak-<AAAAMMDD-HHMMSS>` y el widget arranca con un deck por defecto: el
 original nunca se pierde.
+
+**Si lo editas con PowerShell**, cuidado con `ConvertTo-Json`: serializa una lista
+de un solo elemento como el elemento suelto, sin corchetes. El formato lo tolera al
+leer, pero es más seguro editarlo con un editor de texto o con Python.
 
 ### Estructura
 

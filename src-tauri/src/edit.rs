@@ -109,6 +109,16 @@ pub fn upsert_button(
                 "La carpeta apunta a una superficie inexistente: {surface}"
             ));
         }
+        // La etiqueta de la tecla y el nombre de la superficie son la misma cosa
+        // para quien usa el deck. Si no se sincronizan, renombrar la tecla deja
+        // el nombre viejo en las migas de pan y en el desplegable de carpetas.
+        // Si dos teclas apuntaran a la misma superficie, manda la ultima editada.
+        let etiqueta = boton.label.trim().to_string();
+        if !etiqueta.is_empty() {
+            if let Some(s) = deck.surfaces.get_mut(surface) {
+                s.name = etiqueta;
+            }
+        }
         if integrity::would_create_cycle(deck, surface_id, surface) {
             return Err(
                 "Esa carpeta crearia una navegacion circular: no se puede meter dentro de \
@@ -484,6 +494,38 @@ mod tests {
         assert_eq!(deck.surfaces[surface].name, "Proyectos");
         assert!(matches!(b.icon.source, IconSource::Builtin { .. }));
         assert!(integrity::check(&deck).is_clean());
+    }
+
+    #[test]
+    fn renombrar_la_tecla_renombra_tambien_su_carpeta() {
+        let mut deck = default_deck();
+        let bid = create_folder(&mut deck, "s-root", 0, 9, "Carpeta").unwrap();
+
+        // Editar la tecla cambiandole la etiqueta, como hace el editor.
+        let (sid, pi, bi) = localizar(&deck, &bid).unwrap();
+        let mut editada = deck.surfaces[&sid].pages[pi].buttons[bi].clone();
+        editada.label = "Lista Master".to_string();
+        let Action::Folder { surface } = editada.action.clone() else {
+            panic!("deberia ser una carpeta");
+        };
+        upsert_button(&mut deck, "s-root", 0, editada).unwrap();
+
+        // Sin esto, las migas de pan y el desplegable seguirian diciendo "Carpeta".
+        assert_eq!(deck.surfaces[&surface].name, "Lista Master");
+    }
+
+    #[test]
+    fn una_etiqueta_vacia_no_borra_el_nombre_de_la_carpeta() {
+        let mut deck = default_deck();
+        let bid = create_folder(&mut deck, "s-root", 0, 9, "Proyectos").unwrap();
+        let (sid, pi, bi) = localizar(&deck, &bid).unwrap();
+        let mut editada = deck.surfaces[&sid].pages[pi].buttons[bi].clone();
+        editada.label = "   ".to_string();
+        let Action::Folder { surface } = editada.action.clone() else {
+            panic!()
+        };
+        upsert_button(&mut deck, "s-root", 0, editada).unwrap();
+        assert_eq!(deck.surfaces[&surface].name, "Proyectos");
     }
 
     #[test]

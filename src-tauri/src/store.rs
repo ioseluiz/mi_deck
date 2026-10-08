@@ -380,6 +380,70 @@ mod tests {
     }
 
     #[test]
+    fn un_deck_pasado_por_powershell_sigue_siendo_legible() {
+        // ConvertTo-Json de PowerShell serializa una lista de un elemento como el
+        // elemento suelto, sin corchetes. Antes esto daba el deck por corrupto y
+        // se perdia el trabajo del usuario, que acababa con el deck por defecto.
+        let dir = temp_dir("powershell");
+        let path = dir.join("deck.json");
+        fs::write(
+            &path,
+            r#"{
+              "root": "s-root",
+              "surfaces": {
+                "s-root": {
+                  "name": "Mi Deck",
+                  "pages": {
+                    "buttons": {
+                      "id": "b-uno",
+                      "position": 0,
+                      "label": "Lista Master",
+                      "icon": { "type": "auto" },
+                      "action": { "type": "url", "target": "https://ejemplo" }
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let salida = load(&path);
+        assert!(
+            salida.recovered_from.is_none(),
+            "no deberia haberse dado por corrupto: {:?}",
+            salida.warnings
+        );
+        let raiz = &salida.deck.surfaces["s-root"];
+        assert_eq!(raiz.pages.len(), 1);
+        assert_eq!(raiz.pages[0].buttons.len(), 1);
+        assert_eq!(raiz.pages[0].buttons[0].label, "Lista Master");
+    }
+
+    #[test]
+    fn el_formato_normal_con_listas_sigue_funcionando() {
+        let dir = temp_dir("listas");
+        let path = dir.join("deck.json");
+        fs::write(
+            &path,
+            r#"{
+              "root": "s-root",
+              "surfaces": {
+                "s-root": {
+                  "name": "Mi Deck",
+                  "pages": [
+                    { "buttons": [] },
+                    { "buttons": [] }
+                  ]
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(load(&path).deck.surfaces["s-root"].pages.len(), 2);
+    }
+
+    #[test]
     fn campos_faltantes_toman_valores_por_defecto() {
         let dir = temp_dir("defaults");
         let path = dir.join("deck.json");
