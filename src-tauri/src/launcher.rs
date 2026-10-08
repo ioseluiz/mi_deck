@@ -51,7 +51,16 @@ impl std::fmt::Display for LaunchError {
                 write!(f, "La accion de tipo {kind} no tiene destino configurado.")
             }
             LaunchError::NotFound { target } => {
-                write!(f, "No se encontro: {target}")
+                if target.contains(['\\', '/']) {
+                    write!(f, "No se encontro: {target}")
+                } else {
+                    // Un nombre suelto que no se resolvio: lo util es decir donde
+                    // se busco y como arreglarlo, no solo que no aparecio.
+                    write!(
+                        f,
+                        "No se encontro {target}: no esta en el PATH ni registrado                          en Windows. Pon la ruta completa al ejecutable."
+                    )
+                }
             }
         }
     }
@@ -153,7 +162,109 @@ pub fn resolve_program(target: &str) -> Option<std::path::PathBuf> {
             }
         }
     }
+
+    // Ultimo recurso: App Paths del registro. Los navegadores no estan en PATH,
+    // pero si registrados ahi.
+    for ext in &extensiones {
+        if let Some(p) = desde_app_paths(&format!("{target}{ext}")) {
+            return Some(p);
+        }
+    }
     None
+}
+
+/// Ruta registrada en App Paths para un nombre de ejecutable.
+///
+/// Windows resuelve nombres sueltos como "chrome.exe" por esta clave del
+/// registro, no por PATH: es lo que hace que funcione Win+R. ShellExecute la
+/// consulta sola, pero CreateProcess no, y abrir una URL con un navegador
+/// concreto pasa por CreateProcess. Sin esto, "edge" y "chrome" no se
+/// encontraban nunca aunque estuvieran instalados.
+#[cfg(windows)]
+fn desde_app_paths(nombre: &str) -> Option<std::path::PathBuf> {
+    const APP_PATHS: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths";
+    const APP_PATHS_32: &str = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths";
+
+    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+
+    // El usuario manda sobre la maquina; la vista de 32 bits va al final porque
+    // es donde acaban las instalaciones antiguas.
+    let sitios = [
+        (HKEY_CURRENT_USER, APP_PATHS),
+        (HKEY_LOCAL_MACHINE, APP_PATHS),
+        (HKEY_LOCAL_MACHINE, APP_PATHS_32),
+    ];
+
+    for (raiz, base) in sitios {
+        if let Some(valor) = leer_registro(raiz, &format!("{base}\\{nombre}")) {
+            let ruta = std::path::PathBuf::from(limpiar_ruta(&valor));
+            if ruta.is_file() {
+                return Some(ruta);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn desde_app_paths(_nombre: &str) -> Option<std::path::PathBuf> {
+    None
+}
+
+/// Valor predeterminado (sin nombre) de una clave del registro.
+#[cfg(windows)]
+fn leer_registro(raiz: windows::Win32::System::Registry::HKEY, clave: &str) -> Option<String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{RegGetValueW, RRF_RT_REG_SZ};
+
+    let clave_w: Vec<u16> = std::ffi::OsStr::new(clave)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+
+    let mut bytes: u32 = 0;
+    unsafe {
+        // Primera llamada sin buffer: solo para saber cuanto ocupa.
+        if RegGetValueW(
+            raiz,
+            PCWSTR(clave_w.as_ptr()),
+            PCWSTR::null(),
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut bytes),
+        )
+        .is_err()
+            || bytes == 0
+        {
+            return None;
+        }
+
+        let mut buffer = vec![0u16; (bytes as usize / 2) + 1];
+        let mut tam = bytes;
+        if RegGetValueW(
+            raiz,
+            PCWSTR(clave_w.as_ptr()),
+            PCWSTR::null(),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr() as *mut _),
+            Some(&mut tam),
+        )
+        .is_err()
+        {
+            return None;
+        }
+
+        let largo = buffer.iter().position(|c| *c == 0).unwrap_or(buffer.len());
+        Some(String::from_utf16_lossy(&buffer[..largo]))
+    }
+}
+
+/// El valor de App Paths suele venir entrecomillado.
+fn limpiar_ruta(valor: &str) -> String {
+    valor.trim().trim_matches('"').trim().to_string()
 }
 
 // --------------------------------------------------------------- build_launch
@@ -355,6 +466,16 @@ fn es_url(target: &str) -> bool {
 
 // ------------------------------------------------------------------ ejecucion
 
+/// Ruta con la que invocar realmente a un programa.
+///
+/// Si el nombre se puede resolver (PATH o App Paths), se usa la ruta completa.
+/// Si no, se deja tal cual para que el error del sistema sea el que se muestre.
+pub fn programa_a_lanzar(program: &str) -> String {
+    resolve_program(program)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| program.to_string())
+}
+
 /// Lanza lo que describe el spec. Capa delgada a proposito.
 pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
     validate(spec).map_err(|e| e.to_string())?;
@@ -368,7 +489,11 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
             workdir,
             no_window,
         } => {
-            let mut cmd = std::process::Command::new(program);
+            // CreateProcess tampoco consulta App Paths, asi que no basta con
+            // haberlo validado: hay que entregarle la ruta ya resuelta o un
+            // "chrome.exe" suelto falla con "program not found".
+            let ejecutable = programa_a_lanzar(program);
+            let mut cmd = std::process::Command::new(&ejecutable);
             cmd.args(args);
             if let Some(dir) = workdir {
                 cmd.current_dir(dir);
@@ -582,6 +707,62 @@ mod tests {
             no_window: true,
         };
         assert!(matches!(validate(&mal), Err(LaunchError::NotFound { .. })));
+    }
+
+    #[test]
+    fn limpia_las_comillas_del_valor_del_registro() {
+        // App Paths suele guardar la ruta entrecomillada.
+        assert_eq!(
+            limpiar_ruta(r#""C:\Program Files\Google\Chrome\Application\chrome.exe""#),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        );
+        assert_eq!(limpiar_ruta(r"  C:\x\y.exe  "), r"C:\x\y.exe");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn al_lanzar_un_navegador_se_usa_su_ruta_completa() {
+        // CreateProcess no resuelve nombres sueltos por App Paths: si se le pasa
+        // "chrome.exe" falla con "program not found" aunque este instalado.
+        for navegador in ["msedge.exe", "chrome.exe"] {
+            if desde_app_paths(navegador).is_none() {
+                continue; // no instalado en este equipo
+            }
+            let ruta = programa_a_lanzar(navegador);
+            assert_ne!(ruta, navegador, "{navegador} se paso sin resolver");
+            assert!(
+                std::path::Path::new(&ruta).is_file(),
+                "{navegador} resolvio a algo que no existe: {ruta}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn encuentra_los_navegadores_aunque_no_esten_en_el_path() {
+        // Edge y Chrome no se anaden al PATH: Windows los resuelve por App Paths
+        // del registro. Sin consultarla, abrir una URL con un navegador concreto
+        // fallaba siempre con "no se encontro msedge.exe".
+        for navegador in ["msedge.exe", "chrome.exe"] {
+            let en_path = std::env::var("PATH")
+                .unwrap_or_default()
+                .split(';')
+                .any(|d| std::path::Path::new(d).join(navegador).is_file());
+            assert!(
+                !en_path,
+                "{navegador} esta en PATH: la premisa del test cambio"
+            );
+
+            // Solo se exige si el navegador esta instalado en este equipo.
+            if desde_app_paths(navegador).is_some() {
+                let r = resolve_program(navegador);
+                assert!(
+                    r.is_some(),
+                    "{navegador} esta registrado pero no se resolvio"
+                );
+                assert!(r.unwrap().is_file());
+            }
+        }
     }
 
     #[test]

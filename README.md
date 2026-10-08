@@ -85,7 +85,7 @@ Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura
 ## Comprobaciones
 
 ```powershell
-cargo test                      # 75 pruebas: store, integridad, lanzador, imágenes, íconos, edición
+cargo test                      # 77 pruebas: store, integridad, lanzador, imágenes, íconos, edición
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
 ```
@@ -211,6 +211,12 @@ al pintar y no se guarda en el archivo.
 |---|---|---|
 | `app` | Lanza un `.exe` o `.lnk` | `target`, `args`, `workdir`, `focus_if_running` |
 | `url` | Abre una dirección web | `target`, `browser` (`default`, `edge`, `chrome`, `firefox` o ruta a un `.exe`), `profile` |
+
+Con `browser` distinto de `default`, el navegador se busca primero en el `PATH` y
+después en `App Paths` del registro. Hace falta lo segundo: Edge y Chrome **no** se
+añaden al `PATH`, y es por `App Paths` como Windows resuelve `Win+R → chrome`.
+`ShellExecute` consulta esa clave sola, pero `CreateProcess` no, así que el
+ejecutable se resuelve a su ruta completa antes de lanzarlo.
 | `path` | Abre una carpeta, o revela un archivo seleccionado, en el Explorador | `target` |
 | `script` | Ejecuta un script o comando | `shell` (`powershell`/`cmd`), `target`, `args`, `hidden` |
 | `folder` | Navega a otra superficie del deck | `surface` |
