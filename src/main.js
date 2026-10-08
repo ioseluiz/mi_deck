@@ -61,6 +61,8 @@ function desarmar(repintar = true) {
 }
 /** Nivel de ventana vigente: "normal" | "top" | "desktop". */
 let nivelActual = "top";
+/** Ejecutable de la aplicacion que el usuario tiene delante, segun Rust. */
+let appEnPrimerPlano = null;
 /** id de boton -> URL de su imagen, ya lista para un <img>. */
 let urls = {};
 let temporizadorToast = 0;
@@ -604,6 +606,18 @@ function conectarEdicion() {
   ventana()
     .listen("deck-changed", () => refrescar())
     .catch((e) => console.warn("[MiDeck] no se pudo escuchar deck-changed:", e));
+
+  // Rust avisa cuando la aplicacion en primer plano cambia de verdad, ya
+  // amortiguada. De momento solo se registra; en la fase siguiente es lo que
+  // hara cambiar de perfil.
+  ventana()
+    .listen("app-en-primer-plano", (ev) => {
+      appEnPrimerPlano = ev?.payload?.exe ?? null;
+      console.log("[MiDeck] primer plano:", appEnPrimerPlano);
+    })
+    .catch((e) =>
+      console.warn("[MiDeck] no se pudo escuchar app-en-primer-plano:", e)
+    );
 
   conectarSoltarArchivos(contextoActual, aviso, refrescar).catch((e) =>
     console.warn("[MiDeck] arrastre de archivos no disponible:", e)

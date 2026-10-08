@@ -903,6 +903,25 @@ fn list_installed_apps() -> Vec<apps::AppInstalada> {
     apps::listar()
 }
 
+/// Lo que se le manda al panel cuando cambia la aplicacion en primer plano.
+///
+/// De momento solo viaja el ejecutable. En la fase siguiente llevara ademas el
+/// perfil que le corresponde, que decide Rust y no el frontend.
+#[derive(Clone, Serialize)]
+struct AppEnPrimerPlano {
+    exe: String,
+}
+
+/// Aplicaciones con ventana visible ahora mismo.
+///
+/// Es de aqui de donde se elige la aplicacion de un perfil: el nombre que se
+/// guarda es exactamente el que el gancho de primer plano vera despues, asi que
+/// no hay forma de que no empareje.
+#[tauri::command]
+fn list_running_apps() -> Vec<focus::AppEnEjecucion> {
+    focus::apps_en_ejecucion()
+}
+
 /// Catalogo de acciones de Windows, agrupado por familia.
 ///
 /// Lo pide el editor para construir su desplegable y el panel para saber que
@@ -1205,6 +1224,7 @@ pub fn run() {
             list_surfaces,
             list_system_commands,
             list_installed_apps,
+            list_running_apps,
             icon_for_target,
             notify_deck_changed
         ])
@@ -1233,7 +1253,19 @@ pub fn run() {
             }
             nivel::aplicar(&window, nivel_inicial);
             // Sin esto, un atajo dirigido a otra aplicacion llegaria al panel.
-            focus::vigilar_primer_plano();
+            // El gancho avisa cada vez que la aplicacion en primer plano cambia de
+            // verdad. Quien decide que hacer con eso es esta capa, no focus.rs.
+            {
+                let mango = app.handle().clone();
+                focus::vigilar_primer_plano(move |ruta| {
+                    let exe = focus::nombre_de_ejecutable(&ruta);
+                    // Solo en compilacion de desarrollo: en produccion seria una linea
+                    // por cada Alt+Tab del dia.
+                    #[cfg(debug_assertions)]
+                    eprintln!("[MiDeck] primer plano: {exe}");
+                    let _ = mango.emit("app-en-primer-plano", AppEnPrimerPlano { exe });
+                });
+            }
             registrar_atajo(app.handle(), atajo.as_deref());
 
             if !start_minimized {

@@ -97,6 +97,19 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 /// "no hay ninguna recordada".
 static VENTANA_ANTERIOR: AtomicIsize = AtomicIsize::new(0);
 
+/// Cuanto se espera a que la racha de cambios se calme antes de informar.
+///
+/// Un Alt+Tab, abrir un menu o cerrar un dialogo disparan el evento varias veces
+/// seguidas. Sin esta pausa, el panel parpadearia cambiando de perfil tres veces
+/// para acabar donde iba a acabar de todas formas.
+#[cfg(windows)]
+const AMORTIGUACION: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// Por donde el gancho avisa al hilo trabajador. Acotado y con `try_send`: el
+/// gancho corre en el hilo de la interfaz y no puede bloquearse nunca.
+#[cfg(windows)]
+static EMISOR: std::sync::OnceLock<std::sync::mpsc::SyncSender<isize>> = std::sync::OnceLock::new();
+
 /// Instala el gancho que vigila los cambios de ventana en primer plano.
 ///
 /// Se descarto leer `GetForegroundWindow()` desde `WindowEvent::Focused(true)`:
@@ -104,15 +117,25 @@ static VENTANA_ANTERIOR: AtomicIsize = AtomicIsize::new(0);
 /// devuelve la nuestra. El gancho es el unico sitio donde se ve la transicion.
 ///
 /// `WINEVENT_SKIPOWNPROCESS` hace que no se dispare para nuestras propias
-/// ventanas, asi que no hay que filtrar por identificador de proceso.
+/// ventanas, asi que no hay que filtrar por identificador de proceso. Eso vale
+/// tambien para la ventana del editor, que es del mismo proceso: abrirla no
+/// contara como cambio de aplicacion.
+///
+/// `avisar` recibe la ruta del ejecutable cada vez que la aplicacion en primer
+/// plano **cambia de verdad**. Se pasa como cierre para que este modulo siga sin
+/// saber nada de Tauri.
 #[cfg(windows)]
-pub fn vigilar_primer_plano() {
+pub fn vigilar_primer_plano(avisar: impl Fn(String) + Send + 'static) {
     use windows::Win32::Foundation::{HMODULE, HWND};
     use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
     use windows::Win32::UI::WindowsAndMessaging::{
         EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
     };
 
+    // El gancho corre en el hilo que bombea mensajes, que es el de la interfaz.
+    // Por eso aqui solo se guarda el identificador y se manda por el canal: abrir
+    // el proceso y leer su ruta es trabajo que no tiene por que hacer el hilo que
+    // pinta.
     unsafe extern "system" fn al_cambiar(
         _gancho: HWINEVENTHOOK,
         _evento: u32,
@@ -122,10 +145,18 @@ pub fn vigilar_primer_plano() {
         _hilo: u32,
         _tiempo: u32,
     ) {
-        if !hwnd.is_invalid() {
-            VENTANA_ANTERIOR.store(hwnd.0 as isize, Ordering::Relaxed);
+        if hwnd.is_invalid() {
+            return;
+        }
+        let id = hwnd.0 as isize;
+        VENTANA_ANTERIOR.store(id, Ordering::Relaxed);
+        if let Some(emisor) = EMISOR.get() {
+            // Si la cola esta llena da igual perder este: solo importa el ultimo.
+            let _ = emisor.try_send(id);
         }
     }
+
+    arrancar_trabajador(avisar);
 
     unsafe {
         let gancho = SetWinEventHook(
@@ -147,8 +178,48 @@ pub fn vigilar_primer_plano() {
     }
 }
 
+/// Hilo que amortigua la racha de cambios, resuelve el ejecutable y avisa.
+#[cfg(windows)]
+fn arrancar_trabajador(avisar: impl Fn(String) + Send + 'static) {
+    use std::sync::mpsc::{sync_channel, RecvTimeoutError};
+    use windows::Win32::Foundation::HWND;
+
+    let (emisor, receptor) = sync_channel::<isize>(8);
+    if EMISOR.set(emisor).is_err() {
+        return; // ya habia uno: no instalar dos trabajadores
+    }
+
+    std::thread::spawn(move || {
+        let mut ultimo: Option<String> = None;
+
+        while let Ok(primero) = receptor.recv() {
+            // Quedarse con el ultimo de la racha.
+            let mut id = primero;
+            loop {
+                match receptor.recv_timeout(AMORTIGUACION) {
+                    Ok(siguiente) => id = siguiente,
+                    Err(RecvTimeoutError::Timeout) => break,
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
+            }
+
+            let hwnd = HWND(id as *mut core::ffi::c_void);
+            let Some(ruta) = ejecutable_de(hwnd) else {
+                continue;
+            };
+            // Cambiar entre dos ventanas de la misma aplicacion no es un cambio
+            // de aplicacion, y repintar el panel por eso solo distrae.
+            if ultimo.as_deref() == Some(ruta.as_str()) {
+                continue;
+            }
+            ultimo = Some(ruta.clone());
+            avisar(ruta);
+        }
+    });
+}
+
 #[cfg(not(windows))]
-pub fn vigilar_primer_plano() {}
+pub fn vigilar_primer_plano(_avisar: impl Fn(String) + Send + 'static) {}
 
 /// Identificador de la ventana recordada, si sigue existiendo.
 #[cfg(windows)]
@@ -203,6 +274,99 @@ pub fn devolver_foco() -> bool {
     false
 }
 
+// ------------------------------------------------- aplicaciones abiertas ahora
+
+/// Una aplicacion con ventana visible en este momento.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AppEnEjecucion {
+    /// Nombre del ejecutable, que es la clave de los perfiles: "excel.exe".
+    pub exe: String,
+    /// Titulo de una de sus ventanas, para reconocerla en la lista.
+    pub titulo: String,
+}
+
+/// Quita los repetidos por ejecutable, descarta el propio MiDeck y ordena.
+///
+/// Pura para poder probarla: una lista con Chrome ocho veces no ayuda a nadie a
+/// elegir, y el orden estable evita que la lista baile entre dos aperturas. Lo de
+/// descartarse a si mismo no es cosmetico: el gancho nunca se dispara por nuestras
+/// ventanas, asi que un perfil para MiDeck no se activaria jamas y solo serviria
+/// para que alguien perdiera un rato averiguando por que.
+pub fn ordenar_apps(mut v: Vec<AppEnEjecucion>, propio: &str) -> Vec<AppEnEjecucion> {
+    v.retain(|a| a.exe != propio);
+    v.sort_by(|a, b| a.exe.cmp(&b.exe).then_with(|| a.titulo.cmp(&b.titulo)));
+    v.dedup_by(|a, b| a.exe == b.exe);
+    v
+}
+
+/// Nombre del ejecutable de MiDeck, para no ofrecerse a si mismo.
+fn exe_propio() -> String {
+    std::env::current_exe()
+        .map(|p| nombre_de_ejecutable(&p.to_string_lossy()))
+        .unwrap_or_default()
+}
+
+/// Aplicaciones con ventana visible ahora mismo.
+///
+/// Se eligen de aqui y no del Menu Inicio a proposito: `apps::listar()` devuelve
+/// accesos directos (.lnk) y el gancho devuelve ejecutables (.exe), asi que lo que
+/// se guardara nunca emparejaria con lo que se detecta. Tomandolo de una ventana
+/// abierta, el nombre es exactamente el que el gancho vera despues.
+#[cfg(not(windows))]
+pub fn apps_en_ejecucion() -> Vec<AppEnEjecucion> {
+    Vec::new()
+}
+
+#[cfg(windows)]
+pub fn apps_en_ejecucion() -> Vec<AppEnEjecucion> {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, TRUE};
+    use windows::Win32::UI::WindowsAndMessaging::EnumWindows;
+
+    let mut encontradas: Vec<AppEnEjecucion> = Vec::new();
+
+    unsafe extern "system" fn visitar(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetWindow, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible, GW_OWNER,
+        };
+
+        let salida = &mut *(lparam.0 as *mut Vec<AppEnEjecucion>);
+
+        // Los mismos tres filtros que ya usa focus_running: invisible, con
+        // propietario (un dialogo) o sin titulo no es la ventana principal de nada.
+        if !IsWindowVisible(hwnd).as_bool() {
+            return TRUE;
+        }
+        if GetWindow(hwnd, GW_OWNER).is_ok_and(|o| !o.is_invalid()) {
+            return TRUE;
+        }
+        let largo = GetWindowTextLengthW(hwnd);
+        if largo == 0 {
+            return TRUE;
+        }
+
+        let Some(ruta) = ejecutable_de_ventana(hwnd) else {
+            return TRUE;
+        };
+
+        let mut titulo = vec![0u16; largo as usize + 1];
+        let escritos = GetWindowTextW(hwnd, &mut titulo);
+
+        salida.push(AppEnEjecucion {
+            exe: nombre_de_ejecutable(&ruta),
+            titulo: String::from_utf16_lossy(&titulo[..escritos.max(0) as usize]),
+        });
+        TRUE
+    }
+
+    unsafe {
+        let _ = EnumWindows(
+            Some(visitar),
+            LPARAM(&mut encontradas as *mut Vec<AppEnEjecucion> as isize),
+        );
+    }
+    ordenar_apps(encontradas, &exe_propio())
+}
+
 /// Ruta del ejecutable del proceso dueno de una ventana.
 #[cfg(windows)]
 unsafe fn ejecutable_de_ventana(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {
@@ -241,12 +405,36 @@ unsafe fn ejecutable_de_ventana(hwnd: windows::Win32::Foundation::HWND) -> Optio
     Some(normalizar(Path::new(&ruta)))
 }
 
+/// Ruta del ejecutable de una ventana, ya normalizada.
+///
+/// Envoltura segura de la version interna, para que el resto del programa no
+/// tenga que escribir `unsafe` solo por preguntar de quien es una ventana.
+#[cfg(windows)]
+pub fn ejecutable_de(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {
+    unsafe { ejecutable_de_ventana(hwnd) }
+}
+
 /// Clave de comparacion entre rutas de ejecutable.
 ///
 /// Windows no distingue mayusculas en rutas, y el mismo programa puede llegar
 /// escrito de formas distintas desde deck.json y desde la API.
 fn normalizar(p: &Path) -> String {
     p.to_string_lossy().to_lowercase().replace('/', "\\")
+}
+
+/// Nombre del ejecutable, sin ruta y en minusculas: `excel.exe`.
+///
+/// Es la clave con la que se emparejaran los perfiles por aplicacion. Se usa el
+/// nombre y no la ruta completa a proposito: el mismo programa vive en sitios
+/// distintos segun se instale por usuario o por maquina --Office y Chrome son los
+/// casos tipicos--, y un perfil con la ruta de un equipo no serviria en el de al
+/// lado.
+pub fn nombre_de_ejecutable(ruta: &str) -> String {
+    ruta.rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(ruta)
+        .trim()
+        .to_lowercase()
 }
 
 #[cfg(test)]
@@ -266,5 +454,61 @@ mod tests {
         assert!(!focus_running(Path::new(
             "C:\\no\\existe\\programa_inventado.exe"
         )));
+    }
+
+    // ------------------------------------------ la clave de los perfiles
+
+    #[test]
+    fn el_nombre_del_ejecutable_se_queda_sin_ruta_y_en_minusculas() {
+        assert_eq!(
+            nombre_de_ejecutable(r"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"),
+            "excel.exe"
+        );
+        assert_eq!(
+            nombre_de_ejecutable("C:/Windows/notepad.exe"),
+            "notepad.exe"
+        );
+    }
+
+    /// El motivo de comparar por nombre y no por ruta: la misma aplicacion
+    /// instalada por usuario y por maquina tiene que dar la misma clave.
+    #[test]
+    fn la_misma_app_en_dos_rutas_da_la_misma_clave() {
+        assert_eq!(
+            nombre_de_ejecutable(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+            nombre_de_ejecutable(r"C:\Users\alguien\AppData\Local\Google\Chrome\chrome.exe")
+        );
+    }
+
+    #[test]
+    fn un_nombre_suelto_se_queda_como_esta() {
+        assert_eq!(nombre_de_ejecutable("Excel.exe"), "excel.exe");
+        assert_eq!(nombre_de_ejecutable(""), "");
+    }
+
+    #[test]
+    fn la_lista_de_apps_no_repite_ejecutables() {
+        // Diez ventanas de Chrome son una sola entrada en la lista.
+        let v = ordenar_apps(
+            vec![
+                AppEnEjecucion {
+                    exe: "chrome.exe".into(),
+                    titulo: "Pestana 2".into(),
+                },
+                AppEnEjecucion {
+                    exe: "excel.exe".into(),
+                    titulo: "Libro1".into(),
+                },
+                AppEnEjecucion {
+                    exe: "chrome.exe".into(),
+                    titulo: "Pestana 1".into(),
+                },
+            ],
+            "mideck.exe",
+        );
+        let exes: Vec<&str> = v.iter().map(|a| a.exe.as_str()).collect();
+        assert_eq!(exes, vec!["chrome.exe", "excel.exe"]);
+        // Y se queda con el primero por titulo, para que la lista no baile.
+        assert_eq!(v[0].titulo, "Pestana 1");
     }
 }
