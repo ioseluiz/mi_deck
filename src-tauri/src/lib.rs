@@ -4,6 +4,7 @@
 //! integridad, imagenes y lanzamiento de procesos son comandos. El frontend solo
 //! pinta y envia eventos, asi que lo importante queda cubierto por cargo test.
 
+pub mod apps;
 pub mod edit;
 pub mod focus;
 pub mod icons;
@@ -753,6 +754,15 @@ fn list_surfaces(state: State<AppState>) -> Vec<SurfaceInfo> {
     v
 }
 
+/// Aplicaciones instaladas, para elegirlas por nombre en el editor.
+///
+/// Se calcula al abrir el editor y no se cachea: instalar algo y no verlo en la
+/// lista hasta reiniciar el widget seria peor que recorrer dos carpetas.
+#[tauri::command]
+fn list_installed_apps() -> Vec<apps::AppInstalada> {
+    apps::listar()
+}
+
 /// Catalogo de acciones de Windows, agrupado por familia.
 ///
 /// Lo pide el editor para construir su desplegable y el panel para saber que
@@ -1054,6 +1064,7 @@ pub fn run() {
             close_editor,
             list_surfaces,
             list_system_commands,
+            list_installed_apps,
             notify_deck_changed
         ])
         .setup(move |app| {

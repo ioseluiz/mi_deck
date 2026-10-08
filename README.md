@@ -102,7 +102,8 @@ cargo fmt -- --check
 | Rueda sobre la rejilla, `Ctrl+Tab` | Cambia de página |
 | `Ctrl+E` | Abre `deck.json` en el editor predeterminado |
 | `F5` | Relee `deck.json` del disco sin reiniciar |
-| Clic derecho sobre una tecla | Editar, pegar imagen, quitar imagen, duplicar, eliminar |
+| Botón **menú** de la barra de título | Nueva tecla, nueva carpeta, páginas, ajustes, abrir `deck.json`, recargar |
+| Clic derecho sobre una tecla | Editar, pegar imagen, quitar imagen, duplicar, eliminar, ajustes |
 | Clic derecho sobre una celda vacía | Nueva tecla, nueva carpeta, añadir o quitar página, ajustes |
 | Clic derecho sobre las migas | Ajustes, abrir `deck.json`, recargar |
 | Arrastrar una tecla a otra celda | La mueve; si la celda está ocupada, intercambian |
@@ -258,6 +259,24 @@ ejecutable se resuelve a su ruta completa antes de lanzarlo.
 | `hotkey` | Envía una combinación de teclas | `keys` |
 | `text` | Teclea un texto literal | `text` |
 | `system` | Acción del catálogo de Windows | `command` |
+
+### Elegir la aplicacion sin saber su ruta
+
+La acción `app` ofrece primero un desplegable con las aplicaciones del **menú
+Inicio**, que es lo que el usuario ya reconoce, y debajo deja el campo de ruta
+intacto para quien quiera apuntar a un `.exe` concreto. Elegir de la lista
+escribe la ruta en ese campo: lo que se guarda sigue siendo una ruta, visible y
+editable.
+
+La lista sale de `src-tauri/src/apps.rs`, que recorre el menú Inicio de la
+máquina y el del usuario buscando `.lnk` y `.url`. Se descartan las entradas de
+desinstalación, ayuda y documentación, que nadie quiere en una tecla.
+
+Se eligió el menú Inicio y no el registro de desinstalación porque ese enumera
+paquetes y no aplicaciones: salen actualizaciones y redistribuibles, y la mitad
+no tiene con qué lanzarse. **Limitación conocida:** las aplicaciones de la Tienda
+que no dejan acceso directo en el menú Inicio no aparecen; para esas está el
+campo de ruta.
 
 ### Varias direcciones en una tecla
 

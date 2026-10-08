@@ -34,7 +34,17 @@
 
           <div class="grupo" data-tipo="app">
             <label class="campo">
-              <span>Ejecutable o acceso directo</span>
+              <span>Aplicación</span>
+              <select id="ed-app-lista">
+                <option value="">— Elige una de tus aplicaciones —</option>
+              </select>
+            </label>
+            <p class="nota" id="ed-app-nota">
+              La lista sale de tu menú Inicio. Si la que buscas no está, escribe la
+              ruta abajo.
+            </p>
+            <label class="campo">
+              <span>Ejecutable o acceso directo <small>(o escribe la ruta)</small></span>
               <span class="fila">
                 <input id="ed-app-target" type="text" placeholder="notepad.exe o C:\…\app.exe" />
                 <button type="button" data-examinar="ed-app-target" data-filtro="exe">Examinar…</button>

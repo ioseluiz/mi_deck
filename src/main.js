@@ -31,6 +31,7 @@ const $close = /** @type {HTMLButtonElement} */ (document.getElementById("btn-cl
 const $toast = /** @type {HTMLElement} */ (document.getElementById("toast"));
 const $repo = /** @type {HTMLButtonElement} */ (document.getElementById("btn-repo"));
 const $lock = /** @type {HTMLButtonElement} */ (document.getElementById("btn-lock"));
+const $menu = /** @type {HTMLButtonElement} */ (document.getElementById("btn-menu"));
 const $titlebar = /** @type {HTMLElement} */ (document.getElementById("titlebar"));
 const $panel = /** @type {HTMLElement} */ (document.getElementById("panel"));
 const $pie = /** @type {HTMLElement} */ (document.getElementById("pie"));
@@ -280,6 +281,43 @@ function conectarEventos() {
     }
   });
 
+  // Ajustes y edicion estaban solo en el clic derecho sobre una celda vacia, asi
+  // que con la rejilla llena no habia forma de llegar: un usuario lo reporto. El
+  // boton de la barra de titulo da una via que no depende de que sobre un hueco.
+  $menu.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    if (menuAbierto()) {
+      cerrarMenu();
+      return;
+    }
+    const r = $menu.getBoundingClientRect();
+    const libre = primeraCeldaLibre();
+    const sinHueco = libre === null;
+    abrirMenu(r.left, r.bottom + 4, [
+      {
+        label: "Nueva tecla…",
+        desactivado: sinHueco,
+        accion: () => abrirEditor("nuevo", null, libre ?? 0),
+      },
+      {
+        label: "Nueva carpeta",
+        desactivado: sinHueco,
+        accion: () => nuevaCarpeta(libre ?? 0),
+      },
+      { separador: true },
+      { label: "Añadir una página", accion: () => añadirPagina() },
+      {
+        label: "Quitar esta página",
+        desactivado: (nav?.pageCount ?? 1) <= 1,
+        accion: () => quitarPagina(),
+      },
+      { separador: true },
+      { label: "Ajustes…", accion: () => abrirEditor("ajustes", null, 0) },
+      { label: "Abrir deck.json", accion: () => invoke("open_config_file") },
+      { label: "Recargar", accion: () => recargar() },
+    ]);
+  });
+
   // El pin alterna entre los dos niveles utiles. "Ventana normal" se elige en
   // Ajustes: es el caso raro y no merece un tercer estado en un boton de 30 px.
   $pin.addEventListener("click", async () => {
@@ -419,6 +457,10 @@ function menuContextual(ev) {
         peligro: true,
         accion: () => conMutacion(invoke("delete_button", { buttonId: id })),
       },
+      { separador: true },
+      // Tambien aqui, y no solo sobre una celda vacia: con la rejilla llena no
+      // quedaba ninguna celda sobre la que hacer clic derecho.
+      { label: "Ajustes…", accion: () => abrirEditor("ajustes", null, 0) },
     ]);
     return;
   }
@@ -480,6 +522,18 @@ function añadirPagina() {
 function quitarPagina() {
   const { surfaceId, page } = contextoActual();
   conMutacion(invoke("remove_page", { surfaceId, page }), "Página eliminada.");
+}
+
+/**
+ * Primera celda libre de la pagina que se esta viendo, o null si no queda.
+ *
+ * Se mira el DOM y no `nav.buttons` porque al pintar se recolocan los botones
+ * cuya posicion choca: lo que de verdad esta libre es lo que la rejilla muestra
+ * como hueco, no lo que diga el archivo.
+ */
+function primeraCeldaLibre() {
+  const vacia = $grid.querySelector("[data-celda]");
+  return vacia ? Number(vacia.getAttribute("data-celda")) : null;
 }
 
 /** Ctrl+V pega sobre la tecla que esta bajo el cursor. */

@@ -144,6 +144,42 @@ function mostrarAvisoSistema() {
   nota.hidden = !aviso;
 }
 
+/**
+ * Rellena la lista de aplicaciones instaladas.
+ *
+ * Es la via principal para una tecla de aplicacion: pedirle a alguien la ruta de
+ * un .exe es pedirle que sepa donde instala cada fabricante. El campo de ruta
+ * sigue debajo para lo que no salga en el menu Inicio.
+ */
+function montarListaApps(instaladas) {
+  const sel = $("ed-app-lista");
+  sel.innerHTML =
+    '<option value="">— Elige una de tus aplicaciones —</option>' +
+    instaladas
+      .map((a) => `<option value="${escapar(a.ruta)}">${escapar(a.nombre)}</option>`)
+      .join("");
+  if (!instaladas.length) {
+    $("ed-app-nota").textContent =
+      "No se encontró ninguna aplicación en tu menú Inicio. Escribe la ruta abajo.";
+  }
+}
+
+/**
+ * Deja marcada en la lista la aplicacion que ya tuviera la tecla.
+ *
+ * Si su ruta no esta entre las instaladas (porque se escribio a mano), la lista
+ * se queda en la cabecera: la ruta manda, y lo que se ve abajo es la verdad.
+ */
+function sincronizarListaApps() {
+  const sel = $("ed-app-lista");
+  if (!sel) return;
+  const actual = $("ed-app-target").value.trim();
+  const coincide = Array.from(sel.options).some(
+    (o) => o.value && o.value.toLowerCase() === actual.toLowerCase()
+  );
+  sel.value = coincide ? actual : "";
+}
+
 /** Muestra solo el grupo de campos del tipo de accion elegido. */
 function mostrarGrupo(tipo) {
   for (const g of document.querySelectorAll("[data-tipo]")) {
@@ -174,6 +210,7 @@ function volcarEnFormulario() {
 
   if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
   mostrarAvisoSistema();
+  sincronizarListaApps();
 
   $("ed-path-target").value = tipo === "path" ? a.target ?? "" : "";
 
@@ -561,6 +598,28 @@ function conectar() {
     });
   }
 
+  // Elegir de la lista escribe la ruta en el campo de abajo, no la sustituye: lo
+  // que se guarda sigue siendo una ruta, visible y editable a mano.
+  $("ed-app-lista").addEventListener("change", (ev) => {
+    const ruta = ev.target.value;
+    if (!ruta) return;
+    $("ed-app-target").value = ruta;
+    leerFormulario();
+    const nombre = ev.target.options[ev.target.selectedIndex].textContent;
+    if (!$("ed-label").value) {
+      $("ed-label").value = nombre;
+      leerFormulario();
+    }
+    pintarPrevia();
+  });
+
+  // Y al reves: escribir una ruta a mano deja la lista coherente con ella.
+  $("ed-app-target").addEventListener("input", () => {
+    sincronizarListaApps();
+    leerFormulario();
+    pintarPrevia();
+  });
+
   $("ed-system-command").addEventListener("change", () => {
     mostrarAvisoSistema();
     leerFormulario();
@@ -608,6 +667,7 @@ function conectar() {
         const ruta = await invoke("plugin:dialog|open", { options: opciones });
         if (ruta) {
           $(destino).value = String(ruta);
+          sincronizarListaApps();
           leerFormulario();
           if (!$("ed-label").value) {
             $("ed-label").value = etiquetaPorDefecto(tecla.action);
@@ -688,6 +748,7 @@ async function iniciar() {
     CATALOGO_SISTEMA = await invoke("list_system_commands");
     setCatalogoSistema(CATALOGO_SISTEMA);
     montarCatalogoSistema();
+    montarListaApps(await invoke("list_installed_apps"));
 
     const superficies = await invoke("list_surfaces");
     $("ed-folder-surface").innerHTML = superficies

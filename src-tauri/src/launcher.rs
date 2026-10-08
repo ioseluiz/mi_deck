@@ -737,7 +737,10 @@ fn open_with_shell(target: &str) -> Result<(), String> {
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
     let ancho = |s: &str| -> Vec<u16> {
-        std::ffi::OsStr::new(s).encode_wide().chain(Some(0)).collect()
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(Some(0))
+            .collect()
     };
     let destino = ancho(target);
     let operacion = ancho("open");
