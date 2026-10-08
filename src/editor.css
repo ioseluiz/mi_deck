@@ -47,8 +47,8 @@ body.editor main[hidden] {
   flex-direction: column;
   gap: 11px;
   padding: 14px;
-  background: #1f2227;
-  border: 1px solid #2a2e34;
+  background: #1c1f25;
+  border: 1px solid #4a4d54;
   border-radius: 10px;
 }
 
@@ -86,8 +86,8 @@ h2 {
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  background: #1c1f24;
-  border: 1px solid #272b31;
+  background: #191c21;
+  border: 1px solid #44474e;
   border-radius: 8px;
 }
 
@@ -101,8 +101,8 @@ select {
   width: 100%;
   min-width: 0;
   padding: 7px 9px;
-  background: #15171a;
-  border: 1px solid #32363c;
+  background: #0d0f13;
+  border: 1px solid #63666d;
   border-radius: 6px;
   color: var(--texto);
   font: inherit;
@@ -124,8 +124,8 @@ input[type="color"] {
   width: 44px;
   height: 32px;
   padding: 2px;
-  background: #15171a;
-  border: 1px solid #32363c;
+  background: #0d0f13;
+  border: 1px solid #63666d;
   border-radius: 6px;
 }
 
@@ -161,8 +161,8 @@ input[type="color"] {
 
 button {
   padding: 7px 12px;
-  background: #2a2e34;
-  border: 1px solid #383d44;
+  background: #33363d;
+  border: 1px solid #63656a;
   border-radius: 6px;
   color: var(--texto);
   font: inherit;
@@ -172,11 +172,11 @@ button {
 }
 
 button:hover {
-  background: #343941;
+  background: #3e424a;
 }
 
 button:active {
-  background: #24282d;
+  background: #2a2d33;
 }
 
 button.primario {
@@ -197,7 +197,7 @@ button.primario:hover {
   place-items: center;
   padding: 16px;
   background: var(--fondo);
-  border: 1px solid #2a2e34;
+  border: 1px solid #4a4d54;
   border-radius: 8px;
 }
 
@@ -231,8 +231,8 @@ button.primario:hover {
   gap: 8px;
   align-items: center;
   padding: 11px 18px;
-  background: #15171a;
-  border-top: 1px solid #0d0e10;
+  background: var(--barra);
+  border-top: 1px solid #000;
   flex: 0 0 auto;
 }
 

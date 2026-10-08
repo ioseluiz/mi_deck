@@ -2,16 +2,25 @@
    Los tokens de rejilla (--cols, --rows, --key) los inyecta main.js desde los
    ajustes del deck, para que cambiar la rejilla no exija tocar el CSS. */
 
+/* Paleta resuelta al reves: partiendo del contraste exigido, no eligiendo colores
+   a ojo. Los bordes llegan a 3:1 sobre el panel, que es el minimo de WCAG 1.4.11
+   para componentes de interfaz; antes estaban en 1,29:1 y una celda vacia era
+   practicamente invisible. El contraste va en el BORDE y no en aclarar la cara de
+   la tecla, para no perder la estetica de tecla oscura sobre cuerpo mas oscuro.
+   scripts/verificar_contraste.py comprueba que estos valores siguen cumpliendo. */
 :root {
-  --fondo: #1a1c1f;
-  --tecla: #26292e;
-  --tecla-hover: #32363c;
-  --tecla-activa: #1f2227;
-  --acento: #4c8dff;
-  --texto: #e8eaed;
-  --texto-tenue: #9aa0a6;
+  --fondo: #121419;
+  --barra: #0b0d11;
+  --tecla: #46484d;
+  --tecla-hover: #54565b;
+  --tecla-activa: #393b40;
+  --borde-tecla: #63656a;
+  --borde-vacia: #63656a;
+  --vacia: #1f2126;
+  --acento: #5c9bff;
+  --texto: #eef1f4;
+  --texto-tenue: #aab0b8;
   --error: #f0616d;
-  --borde: #000000;
 
   --cols: 5;
   --rows: 3;
@@ -45,7 +54,7 @@ body {
   height: 100%;
   margin: 8px;
   background: var(--fondo);
-  border: 1px solid #0d0e10;
+  border: 1px solid #000;
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   overflow: hidden;
@@ -59,8 +68,8 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 6px 6px 6px 12px;
-  background: #15171a;
-  border-bottom: 1px solid #0d0e10;
+  background: var(--barra);
+  border-bottom: 1px solid #000;
   flex: 0 0 auto;
 }
 
@@ -195,8 +204,13 @@ body {
   gap: 5px;
   padding: 7px 5px;
   background: var(--tecla);
-  border: 1px solid #16181b;
+  /* El borde es lo que define la tecla: antes era mas oscuro que el panel
+     (1,04:1) y la tecla no tenia contorno apreciable. */
+  border: 1px solid var(--borde-tecla);
   border-radius: var(--radio-tecla);
+  /* Filo superior claro: devuelve la sensacion de tecla elevada sin tener que
+     aclarar toda la cara. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   color: var(--texto);
   font: inherit;
   cursor: pointer;
@@ -219,13 +233,16 @@ body {
 }
 
 .key--vacia {
-  background: rgba(255, 255, 255, 0.022);
-  border: 1px dashed #2c3036;
+  background: var(--vacia);
+  /* Discontinuo y a 3:1: el hueco se ve, y se distingue de una tecla llena por
+     el trazo, no solo por el tono. */
+  border: 1px dashed var(--borde-vacia);
+  box-shadow: none;
   cursor: default;
 }
 
 .key--vacia:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: #272a30;
 }
 
 .key--error {
@@ -242,11 +259,11 @@ body {
   right: 0;
   border-width: 0 13px 13px 0;
   border-style: solid;
-  border-color: transparent #3c4149 transparent transparent;
+  border-color: transparent #80848c transparent transparent;
 }
 
 .key--volver {
-  background: #20242a;
+  background: #2f3238;
 }
 
 .key-icono {
@@ -452,8 +469,8 @@ body {
   z-index: 50;
   min-width: 182px;
   padding: 4px;
-  background: #24282e;
-  border: 1px solid #383d44;
+  background: #23262c;
+  border: 1px solid #5a5d64;
   border-radius: 8px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
 }
@@ -494,7 +511,7 @@ body {
 .ctx-sep {
   height: 1px;
   margin: 4px 6px;
-  background: #383d44;
+  background: #5a5d64;
 }
 
 /* ------------------------------------------------------------------ arrastre */

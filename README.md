@@ -85,6 +85,7 @@ Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura
 ## Comprobaciones
 
 ```powershell
+python scripts/verificar_contraste.py   # contraste de la paleta
 cargo test                      # 82 pruebas: store, integridad, lanzador, imágenes, íconos, edición
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
@@ -121,6 +122,21 @@ cargo fmt -- --check
 
 Cerrar no termina la aplicación: es un widget, no una ventana de documento. Para
 salir de verdad, **Salir** en el menú de la bandeja.
+
+## Contraste
+
+La paleta no se eligió a ojo: se despejó a partir del contraste exigido. Los bordes
+de las teclas y de las celdas vacías llegan a **3,16:1** sobre el panel, que supera
+el mínimo de 3:1 que pide WCAG 1.4.11 para componentes de interfaz. Antes estaban
+en **1,29:1** y sobre fondo oscuro una celda vacía era prácticamente invisible.
+
+El contraste va en el **borde**, no en aclarar la cara de la tecla: así se mantiene
+la estética de tecla oscura sobre cuerpo más oscuro. Y las celdas vacías llevan
+trazo discontinuo, para que se distingan de una tecla llena por la forma y no solo
+por el tono.
+
+`python scripts/verificar_contraste.py` comprueba que una edición futura no baje
+ninguno de esos valores, tanto en el panel como en la ventana del editor.
 
 ## Tamaño de la rejilla
 
