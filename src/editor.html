@@ -318,6 +318,24 @@
           <span>Arrancar oculto en la bandeja</span>
         </label>
 
+        <h2>Capturas de pantalla</h2>
+        <label class="campo">
+          <span>Carpeta <small>(vacío: Imágenes\MiDeck)</small></span>
+          <span class="fila">
+            <input id="aj-capturas-dir" type="text" placeholder="%USERPROFILE%\Pictures\MiDeck" />
+            <button type="button" data-examinar="aj-capturas-dir" data-filtro="dir">Carpeta…</button>
+          </span>
+        </label>
+        <label class="check">
+          <input id="aj-capturas-portapapeles" type="checkbox" />
+          <span>Copiar también al portapapeles, lista para pegar</span>
+        </label>
+        <p class="nota">
+          Afecta a las teclas <em>Capturar toda la pantalla</em> y <em>Capturar la
+          ventana activa</em>. La captura de región la hace Windows y va siempre al
+          portapapeles.
+        </p>
+
         <h2>Mantenimiento</h2>
         <div id="aj-huerfanas" class="nota"></div>
         <div class="fila fila--envolver">

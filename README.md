@@ -304,7 +304,7 @@ y no hay una segunda lista en JavaScript que se pueda quedar desfasada.
 
 | Familia | `command` |
 |---|---|
-| Captura | `screenshot_region`, `screen_record` |
+| Captura | `screenshot_region`, `screenshot_full`, `screenshot_window`, `screen_record` |
 | Multimedia y volumen | `media_play_pause`, `media_next`, `media_prev`, `volume_up`, `volume_down`, `volume_mute` |
 | Sistema | `lock`, `show_desktop`, `task_view`, `clipboard_history`, `emoji_picker`, `desktop_prev`, `desktop_next`, `file_explorer`, `task_manager`, `settings` |
 
@@ -317,6 +317,32 @@ un equipo gestionado eso es un riesgo real.
 graba el Explorador de archivos ni el escritorio, solo ventanas de aplicación, y si
 está deshabilitada por directiva la tecla no hará nada. El editor lo advierte en el
 propio formulario.
+
+### Capturas de pantalla
+
+`screenshot_full` y `screenshot_window` las hace MiDeck, no Windows. Guardan un
+PNG en `Imágenes\MiDeck` —o donde digan los ajustes— y, si así se configura, lo
+dejan además en el portapapeles. La tecla avisa de la ruta al terminar: una
+captura que no dice dónde quedó es una captura perdida.
+
+Dos detalles que no son obvios:
+
+- **El panel se aparta de la foto.** Capturar "toda la pantalla" y que salga el
+  botón que acabas de pulsar no es lo que nadie espera, así que la ventana se
+  oculta, se espera a que el compositor repinte y se vuelve a mostrar con su
+  nivel original.
+- **BitBlt no escribe el canal alfa.** Deja basura, casi siempre ceros, de modo
+  que el PNG sale entero transparente y la captura parece vacía. Hay que forzarlo
+  a opaco, y hay un test que lo vigila.
+
+La ventana activa se captura con `PrintWindow` y `PW_RENDERFULLCONTENT`, que pide
+a la ventana que se dibuje ella misma: sale entera aunque el panel la estuviera
+tapando. Después se recorta el borde invisible de redimensión que `GetWindowRect`
+incluye y DWM no, para que no quede un cerco negro alrededor. La ventana que se
+captura es **la que estaba delante antes de pulsar el panel**, no el panel.
+
+La captura de **región** se queda delegada en `Win+Shift+S`: exige una
+superposición de selección que Windows ya trae resuelta.
 
 ### Atajos y texto
 

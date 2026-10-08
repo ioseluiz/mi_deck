@@ -80,6 +80,10 @@ pub struct Settings {
     pub opacity: f32,
     pub start_with_windows: bool,
     pub start_minimized: bool,
+    /// Donde se guardan las capturas. Vacio = Imagenes\MiDeck del usuario.
+    pub screenshot_dir: String,
+    /// Ademas de guardarla, dejarla en el portapapeles lista para pegar.
+    pub screenshot_to_clipboard: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowPos>,
 }
@@ -95,6 +99,10 @@ impl Default for Settings {
             opacity: 1.0,
             start_with_windows: false,
             start_minimized: false,
+            screenshot_dir: String::new(),
+            // Por defecto si: casi siempre la captura es para pegarla en un
+            // correo o en un ticket, no para dejarla en una carpeta.
+            screenshot_to_clipboard: true,
             window: None,
         }
     }

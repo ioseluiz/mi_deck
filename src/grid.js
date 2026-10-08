@@ -32,6 +32,10 @@ export const ICONOS = {
     '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M9 3h6l1.5 2H21a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.5zm3 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10m0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6"/></svg>',
   video:
     '<svg viewBox="0 0 24 24"><path d="M3 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1m14 4.5 5-3.5v10l-5-3.5z"/></svg>',
+  "camara-pantalla":
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 3h18a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-7v2h3v2H8v-2h3v-2H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1m9 3.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9m0 2.2a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 1 1 0-4.6"/></svg>',
+  "camara-ventana":
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m1 4v10h16V8zm8 1.5a4 4 0 1 0 0 8 4 4 0 1 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 1 1 0-4"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
   siguiente:
     '<svg viewBox="0 0 24 24"><path d="M5 5v14l9-7zM16 5h3v14h-3z"/></svg>',

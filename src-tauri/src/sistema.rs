@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 pub enum SystemCommand {
     // --- captura
     ScreenshotRegion,
+    ScreenshotFull,
+    ScreenshotWindow,
     ScreenRecord,
     // --- multimedia
     MediaPlayPause,
@@ -75,6 +77,10 @@ pub enum Mecanismo {
     Shell(&'static str),
     /// Llamada directa a la API de Windows.
     Api,
+    /// Captura propia. No la resuelve `launcher::execute` sino `run_action`,
+    /// porque necesita los ajustes del usuario y el portapapeles de la
+    /// aplicacion, que esa capa no tiene a mano.
+    Capturar(crate::captura::Objetivo),
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -113,7 +119,7 @@ const fn c(
 }
 
 use Familia::{Captura, Multimedia, Sistema};
-use Mecanismo::{Api, Shell, Teclas};
+use Mecanismo::{Api, Capturar, Shell, Teclas};
 use SystemCommand as S;
 
 /// El catalogo completo. Una linea por accion.
@@ -144,6 +150,30 @@ const CATALOGO: &[ComandoInfo] = &[
             Captura,
             "video",
             Teclas("Win+Alt+R"),
+        )
+    },
+    ComandoInfo {
+        aviso: Some(
+            "Guarda un PNG de todos los monitores. La carpeta y si se copia al              portapapeles se eligen en Ajustes.",
+        ),
+        ..c(
+            S::ScreenshotFull,
+            "Capturar toda la pantalla",
+            Captura,
+            "camara-pantalla",
+            Capturar(crate::captura::Objetivo::Pantalla),
+        )
+    },
+    ComandoInfo {
+        aviso: Some(
+            "Captura la ventana que tuvieras delante antes de pulsar el panel, no              el panel. Sale entera aunque estuviera tapada.",
+        ),
+        ..c(
+            S::ScreenshotWindow,
+            "Capturar la ventana activa",
+            Captura,
+            "camara-ventana",
+            Capturar(crate::captura::Objetivo::VentanaActiva),
         )
     },
     // ---------------------------------------------------------- multimedia
@@ -324,6 +354,8 @@ mod tests {
     fn todas() -> Vec<SystemCommand> {
         let v = vec![
             S::ScreenshotRegion,
+            S::ScreenshotFull,
+            S::ScreenshotWindow,
             S::ScreenRecord,
             S::MediaPlayPause,
             S::MediaNext,
@@ -345,6 +377,8 @@ mod tests {
         for cmd in &v {
             match cmd {
                 S::ScreenshotRegion
+                | S::ScreenshotFull
+                | S::ScreenshotWindow
                 | S::ScreenRecord
                 | S::MediaPlayPause
                 | S::MediaNext

@@ -41,6 +41,9 @@ pub enum LaunchSpec {
     System {
         command: crate::sistema::SystemCommand,
     },
+    /// Captura de pantalla propia. La resuelve `run_action`, no `execute`:
+    /// necesita los ajustes del usuario y el portapapeles de la aplicacion.
+    Capture { objetivo: crate::captura::Objetivo },
     /// Varias cosas, en orden. Hace falta para abrir un grupo de direcciones con
     /// el navegador predeterminado, donde no hay una sola linea de comandos que
     /// las acepte todas.
@@ -453,6 +456,7 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
                     target: t.to_string(),
                 },
                 Mecanismo::Api => LaunchSpec::System { command: *command },
+                Mecanismo::Capturar(objetivo) => LaunchSpec::Capture { objetivo },
             })
         }
 
@@ -577,6 +581,8 @@ pub fn validate(spec: &LaunchSpec) -> Result<(), LaunchError> {
         // El catalogo ya garantiza que el comando existe: lo comprobo
         // build_launch al construir esta variante.
         LaunchSpec::System { .. } => Ok(()),
+        // Nada que comprobar contra el disco: la carpeta se crea al guardar.
+        LaunchSpec::Capture { .. } => Ok(()),
         // Si una sola parte no es valida, la tecla se marca en rojo entera: mas
         // vale no abrir nada que abrir la mitad de un grupo de direcciones.
         LaunchSpec::Varios(partes) => {
@@ -673,6 +679,12 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
         }
 
         LaunchSpec::System { command } => crate::sistema::ejecutar_api(*command),
+
+        // Si se llega aqui es que run_action no la intercepto. Se falla en voz
+        // alta en vez de no hacer nada, que seria imposible de diagnosticar.
+        LaunchSpec::Capture { .. } => {
+            Err("La captura tiene que resolverla run_action, no execute.".to_string())
+        }
 
         // Se intentan todas aunque una falle: si la tercera direccion de un grupo
         // esta mal escrita, las otras cinco ya se abrieron y cerrarlas en cadena

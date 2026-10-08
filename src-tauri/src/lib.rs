@@ -5,6 +5,7 @@
 //! pinta y envia eventos, asi que lo importante queda cubierto por cargo test.
 
 pub mod apps;
+pub mod captura;
 pub mod edit;
 pub mod focus;
 pub mod icons;
@@ -63,6 +64,19 @@ pub struct DeckView {
 #[derive(Serialize)]
 pub struct ActionOutcome {
     navigate_to: Option<String>,
+    /// Aviso que mostrar al usuario. Una captura que no dice donde quedo el
+    /// archivo es una captura que el usuario no encuentra.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+impl ActionOutcome {
+    fn nada() -> Self {
+        Self {
+            navigate_to: None,
+            message: None,
+        }
+    }
 }
 
 // -------------------------------------------------------- resolucion de iconos
@@ -152,7 +166,11 @@ fn reload_deck(state: State<AppState>) -> DeckView {
 
 /// Ejecuta la accion de un boton. Devuelve a donde navegar si era una carpeta.
 #[tauri::command]
-fn run_action(button_id: String, state: State<AppState>) -> Result<ActionOutcome, String> {
+fn run_action(
+    app: AppHandle,
+    button_id: String,
+    state: State<AppState>,
+) -> Result<ActionOutcome, String> {
     let accion = {
         let deck = state.deck.lock().unwrap();
         find_action(&deck, &button_id)
@@ -169,7 +187,7 @@ fn run_action(button_id: String, state: State<AppState>) -> Result<ActionOutcome
     {
         if let Some(ruta) = launcher::resolve_program(&launcher::expand_env(target)) {
             if focus::focus_running(&ruta) {
-                return Ok(ActionOutcome { navigate_to: None });
+                return Ok(ActionOutcome::nada());
             }
         }
     }
@@ -187,11 +205,85 @@ fn run_action(button_id: String, state: State<AppState>) -> Result<ActionOutcome
         }
         return Ok(ActionOutcome {
             navigate_to: Some(surface.clone()),
+            message: None,
+        });
+    }
+
+    // Igual que Navigate: no la resuelve `execute`, porque hace falta la
+    // configuracion del usuario y el portapapeles de la aplicacion.
+    if let launcher::LaunchSpec::Capture { objetivo } = &spec {
+        let destino = hacer_captura(&app, &state, *objetivo)?;
+        return Ok(ActionOutcome {
+            navigate_to: None,
+            message: Some(format!("Captura guardada en {destino}")),
         });
     }
 
     launcher::execute(&spec)?;
-    Ok(ActionOutcome { navigate_to: None })
+    Ok(ActionOutcome::nada())
+}
+
+/// Hace la captura, la guarda y la deja en el portapapeles si asi se pidio.
+///
+/// Devuelve la ruta del archivo, que es lo unico que el usuario necesita saber.
+fn hacer_captura(
+    app: &AppHandle,
+    state: &State<AppState>,
+    objetivo: captura::Objetivo,
+) -> Result<String, String> {
+    let (carpeta_ajuste, al_portapapeles) = {
+        let deck = state.deck.lock().unwrap();
+        (
+            deck.settings.screenshot_dir.clone(),
+            deck.settings.screenshot_to_clipboard,
+        )
+    };
+
+    // El panel se aparta de la foto: capturar "toda la pantalla" y que salga el
+    // boton que acabas de pulsar no es lo que nadie espera. Con la ventana activa
+    // no hace falta, porque PrintWindow la dibuja ella misma.
+    let panel = (objetivo == captura::Objetivo::Pantalla)
+        .then(|| app.get_webview_window("main"))
+        .flatten();
+    if let Some(w) = &panel {
+        let _ = w.hide();
+        // Sin esta pausa el compositor no ha terminado de repintar y el panel
+        // sale igualmente en la captura.
+        std::thread::sleep(std::time::Duration::from_millis(140));
+    }
+
+    let imagen = captura::capturar(objetivo);
+
+    if let Some(w) = &panel {
+        let _ = w.show();
+        let nivel = state.deck.lock().unwrap().settings.window_level;
+        nivel::aplicar(w, nivel);
+    }
+
+    let imagen = imagen?;
+    let carpeta = captura::carpeta_elegida(&carpeta_ajuste, captura::carpeta_por_defecto());
+    let destino = captura::guardar(&imagen, &carpeta)?;
+
+    // El portapapeles va despues de guardar y no aborta nada: el archivo ya esta
+    // en disco, y perder la captura entera porque el portapapeles estaba ocupado
+    // seria un mal negocio.
+    if al_portapapeles {
+        if let Err(e) = al_portapapeles_imagen(app, &imagen) {
+            eprintln!("[MiDeck] no se pudo copiar la captura al portapapeles: {e}");
+        }
+    }
+
+    Ok(destino.display().to_string())
+}
+
+/// Deja la imagen en el portapapeles, lista para pegar.
+fn al_portapapeles_imagen(app: &AppHandle, img: &image::RgbaImage) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+
+    let imagen = tauri::image::Image::new(img.as_raw(), img.width(), img.height());
+    app.clipboard()
+        .write_image(&imagen)
+        .map_err(|e| e.to_string())
 }
 
 /// Monitores conectados, en coordenadas del escritorio virtual.

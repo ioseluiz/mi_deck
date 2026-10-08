@@ -460,6 +460,8 @@ async function cargarAjustes(vista) {
   $("aj-lock").checked = Boolean(settings.lock_position);
   explicarNivel();
   $("aj-minimized").checked = settings.start_minimized;
+  $("aj-capturas-dir").value = settings.screenshot_dir ?? "";
+  $("aj-capturas-portapapeles").checked = settings.screenshot_to_clipboard !== false;
   autostartInicial = Boolean(settings.start_with_windows);
   $("aj-autostart").checked = autostartInicial;
 
@@ -505,6 +507,8 @@ async function guardarAjustes() {
     lock_position: $("aj-lock").checked,
     hotkey: $("aj-hotkey").value.trim() || null,
     start_minimized: $("aj-minimized").checked,
+    screenshot_dir: $("aj-capturas-dir").value.trim(),
+    screenshot_to_clipboard: $("aj-capturas-portapapeles").checked,
   };
   await invoke("update_settings", { settings: nuevos });
 

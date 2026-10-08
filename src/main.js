@@ -184,6 +184,8 @@ function volver() {
 async function pulsar(botonId) {
   try {
     const salida = await invoke("run_action", { buttonId: botonId });
+    // Una captura que no dice donde quedo el archivo es una captura perdida.
+    if (salida?.message) aviso(salida.message, "info");
     if (salida?.navigate_to) {
       if (nav?.enter(salida.navigate_to)) pintar("adelante");
       else aviso("No se pudo entrar a la carpeta: la navegación sería circular.");
