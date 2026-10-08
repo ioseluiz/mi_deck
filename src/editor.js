@@ -54,6 +54,18 @@ let tecla = {
 let settings = null;
 let autostartInicial = false;
 
+/**
+ * Icono que Windows da al destino actual, para la vista previa.
+ *
+ * El panel ya pinta el icono real de cada aplicacion; aqui se pedia aparte
+ * porque el editor solo tenia el destino a medio escribir. Vive fuera de
+ * `tecla.icon` a proposito: es algo que se ve, no algo que se guarde.
+ */
+let PREVIA_AUTO = null;
+
+/** Tipos de accion de los que Windows sabe sacar un icono. */
+const CON_ICONO_PROPIO = new Set(["app", "path", "script"]);
+
 // ------------------------------------------------------------------- utiles
 
 function error(msg) {
@@ -92,6 +104,11 @@ function pintarPrevia() {
     contenido = escapar(icon.char);
   } else if (icon.type === "image" && icon.src) {
     contenido = `<img src="${escapar(icon.src)}" alt="">`;
+  } else if (PREVIA_AUTO && CON_ICONO_PROPIO.has(tecla.action?.type)) {
+    // El mismo icono que Windows le da al destino, que es el que acabara
+    // saliendo en el panel. Antes aqui habia un cuadrado generico y no se sabia
+    // como iba a quedar la tecla hasta guardarla.
+    contenido = `<img src="${escapar(PREVIA_AUTO)}" alt="">`;
   } else if (tecla.action?.type === "url") {
     const dom = (tecla.action.target || "").split("//").pop()?.split("/")[0] ?? "?";
     let h = 0;
@@ -111,6 +128,35 @@ function pintarPrevia() {
 }
 
 // ------------------------------------------------------- formulario de tecla
+
+/**
+ * Pide a Windows el icono del destino actual y repinta la vista previa.
+ *
+ * Va con retardo porque el campo de destino dispara en cada tecla y extraer un
+ * icono toca el disco: sin esto, escribir una ruta larga lanzaria una extraccion
+ * por caracter.
+ */
+let temporizadorIcono = null;
+function refrescarIconoAuto() {
+  clearTimeout(temporizadorIcono);
+  temporizadorIcono = setTimeout(async () => {
+    const tipo = tecla.action?.type;
+    if (!CON_ICONO_PROPIO.has(tipo)) {
+      PREVIA_AUTO = null;
+      pintarPrevia();
+      return;
+    }
+    const destino = tecla.action?.target ?? "";
+    try {
+      const ruta = await invoke("icon_for_target", { target: destino });
+      PREVIA_AUTO = ruta ? urlDeArchivo(ruta) : null;
+    } catch {
+      // Un destino a medio escribir no es un error que merezca molestar.
+      PREVIA_AUTO = null;
+    }
+    pintarPrevia();
+  }, 250);
+}
 
 /**
  * Rellena el desplegable de acciones de Windows con los grupos del catalogo.
@@ -228,6 +274,7 @@ function volcarEnFormulario() {
   $("ed-labelstyle").value = icon.label_style ?? "below";
   if (icon.background) $("ed-bg").value = icon.background;
 
+  refrescarIconoAuto();
   pintarPrevia();
 }
 
@@ -579,6 +626,7 @@ function conectar() {
   $("ed-tipo").addEventListener("change", () => {
     mostrarGrupo($("ed-tipo").value);
     leerFormulario();
+    refrescarIconoAuto();
     pintarPrevia();
   });
 
@@ -589,11 +637,14 @@ function conectar() {
     "ed-labelstyle",
     "ed-url-target",
     "ed-urls-targets",
+    "ed-path-target",
+    "ed-script-target",
     "ed-hotkey-keys",
     "ed-text-texto",
   ]) {
     $(id).addEventListener("input", () => {
       leerFormulario();
+      refrescarIconoAuto();
       pintarPrevia();
     });
   }
@@ -610,6 +661,7 @@ function conectar() {
       $("ed-label").value = nombre;
       leerFormulario();
     }
+    refrescarIconoAuto();
     pintarPrevia();
   });
 
@@ -617,6 +669,7 @@ function conectar() {
   $("ed-app-target").addEventListener("input", () => {
     sincronizarListaApps();
     leerFormulario();
+    refrescarIconoAuto();
     pintarPrevia();
   });
 
@@ -669,6 +722,7 @@ function conectar() {
           $(destino).value = String(ruta);
           sincronizarListaApps();
           leerFormulario();
+          refrescarIconoAuto();
           if (!$("ed-label").value) {
             $("ed-label").value = etiquetaPorDefecto(tecla.action);
             leerFormulario();

@@ -754,6 +754,27 @@ fn list_surfaces(state: State<AppState>) -> Vec<SurfaceInfo> {
     v
 }
 
+/// Icono que le corresponde a un destino, para la vista previa del editor.
+///
+/// El panel ya pinta el icono real de cada aplicacion, porque `IconSource::Auto`
+/// lo extrae del destino al cargar el deck. El editor no podia: dibujaba un
+/// generico hasta que guardabas e ibas a mirar como habia quedado. Con esto
+/// ensena el mismo icono que se vera, mientras eliges.
+///
+/// Devuelve `None` sin ruido cuando no hay icono que sacar: un destino a medio
+/// escribir no es un error, es lo normal mientras se teclea.
+#[tauri::command]
+fn icon_for_target(target: String) -> Option<String> {
+    let expandido = launcher::expand_env(&target);
+    if expandido.trim().is_empty() {
+        return None;
+    }
+    let ruta = launcher::resolve_program(&expandido)?;
+    icons::shell_icon(&ruta)
+        .ok()
+        .map(|p| p.display().to_string())
+}
+
 /// Aplicaciones instaladas, para elegirlas por nombre en el editor.
 ///
 /// Se calcula al abrir el editor y no se cachea: instalar algo y no verlo en la
@@ -1065,6 +1086,7 @@ pub fn run() {
             list_surfaces,
             list_system_commands,
             list_installed_apps,
+            icon_for_target,
             notify_deck_changed
         ])
         .setup(move |app| {

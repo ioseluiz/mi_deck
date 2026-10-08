@@ -7,8 +7,15 @@
 //!   SHGetImageList(SHIL_JUMBO)          ->  HICON de 256 px
 //!   GetIconInfo + GetDIBits             ->  pixeles BGRA
 //!
-//! Se usa SHGetFileInfoW sin SHGFI_USEFILEATTRIBUTES a proposito: asi un .lnk
-//! devuelve el icono real de su destino en vez del generico de acceso directo.
+//! Se usa SHGetFileInfoW sin SHGFI_USEFILEATTRIBUTES a proposito: asi un archivo
+//! concreto da su propio icono y no el generico de su extension.
+//!
+//! Con un .lnk eso no basta. Se creyo que si, y durante un tiempo las teclas de
+//! acceso directo salieron con el icono de documento en blanco: un .lnk de
+//! SpecRel que apuntaba a su .exe con su .ico propio daba el generico. La lista
+//! de aplicaciones del menu Inicio es toda accesos directos, asi que el caso paso
+//! de raro a ser el habitual. Ahora el acceso directo se resuelve primero por COM
+//! y el icono se saca de donde el propio acceso directo dice.
 
 use std::path::{Path, PathBuf};
 
@@ -63,6 +70,14 @@ pub fn shell_icon(target: &Path) -> Result<PathBuf, String> {
     Ok(destino)
 }
 
+/// Un acceso directo, que hay que resolver antes de pedirle el icono.
+pub fn es_acceso_directo(target: &Path) -> bool {
+    target
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("lnk"))
+        .unwrap_or(false)
+}
+
 #[cfg(not(windows))]
 fn extraer(_target: &Path) -> Result<image::RgbaImage, String> {
     Err("La extraccion de iconos solo esta implementada en Windows.".into())
@@ -70,6 +85,93 @@ fn extraer(_target: &Path) -> Result<image::RgbaImage, String> {
 
 #[cfg(windows)]
 fn extraer(target: &Path) -> Result<image::RgbaImage, String> {
+    // De un .lnk, Windows devuelve por esta via el icono generico de documento.
+    // Lo que se quiere es el icono de aquello a lo que apunta.
+    let resuelto = if es_acceso_directo(target) {
+        resolver_acceso_directo(target).unwrap_or_else(|| target.to_path_buf())
+    } else {
+        target.to_path_buf()
+    };
+    extraer_de(&resuelto)
+}
+
+/// De donde sacar el icono de un acceso directo.
+///
+/// Primero lo que el propio acceso directo declara, que es lo que respeta el
+/// Explorador y lo que el fabricante quiso; si no declara nada utilizable, su
+/// destino. `None` si no se puede resolver, y entonces se usa el .lnk tal cual.
+#[cfg(windows)]
+fn resolver_acceso_directo(lnk: &Path) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::{Interface, PCWSTR};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, STGM_READ,
+    };
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink, SLGP_UNCPRIORITY};
+
+    let ruta: Vec<u16> = lnk.as_os_str().encode_wide().chain(Some(0)).collect();
+
+    unsafe {
+        // Puede estar ya inicializado por Tauri en este hilo. Solo se deshace lo
+        // que se haya hecho aqui: apagarle el COM a otro es peor que no entrar.
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let hay_que_cerrar = hr.is_ok();
+
+        let resultado = (|| {
+            let enlace: IShellLinkW =
+                CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
+            let archivo: IPersistFile = enlace.cast().ok()?;
+            archivo.Load(PCWSTR(ruta.as_ptr()), STGM_READ).ok()?;
+
+            // Lo que el acceso directo declara como su icono.
+            let mut buffer = [0u16; 260];
+            let mut indice = 0i32;
+            if enlace.GetIconLocation(&mut buffer, &mut indice).is_ok() {
+                if let Some(p) = ruta_valida(&buffer) {
+                    return Some(p);
+                }
+            }
+
+            // Si no declara ninguno, el programa al que apunta.
+            let mut destino = [0u16; 260];
+            if enlace
+                .GetPath(
+                    &mut destino,
+                    std::ptr::null_mut(),
+                    SLGP_UNCPRIORITY.0 as u32,
+                )
+                .is_ok()
+            {
+                if let Some(p) = ruta_valida(&destino) {
+                    return Some(p);
+                }
+            }
+            None
+        })();
+
+        if hay_que_cerrar {
+            CoUninitialize();
+        }
+        resultado
+    }
+}
+
+/// Convierte un buffer ancho terminado en cero en una ruta que exista.
+#[cfg(windows)]
+fn ruta_valida(buffer: &[u16]) -> Option<PathBuf> {
+    let largo = buffer.iter().position(|c| *c == 0).unwrap_or(buffer.len());
+    let s = String::from_utf16_lossy(&buffer[..largo]);
+    let expandido = crate::launcher::expand_env(s.trim());
+    if expandido.is_empty() {
+        return None;
+    }
+    let p = PathBuf::from(expandido);
+    p.is_file().then_some(p)
+}
+
+#[cfg(windows)]
+fn extraer_de(target: &Path) -> Result<image::RgbaImage, String> {
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
     use windows::Win32::UI::Controls::{IImageList, ILD_TRANSPARENT};

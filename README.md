@@ -389,9 +389,15 @@ una pérdida de trabajo.
 ### Íconos automáticos
 
 `"type": "auto"` extrae el ícono real de Windows con
-`SHGetFileInfoW` + `SHGetImageList(SHIL_JUMBO)`, que da hasta 256 px y resuelve el
-destino de los `.lnk`. Se descartó el crate `systemicons` justamente por lo
-contrario: usa `ExtractIconExW`, tope 32 × 32 y sin resolver accesos directos.
+`SHGetFileInfoW` + `SHGetImageList(SHIL_JUMBO)`, que da hasta 256 px. Se descartó
+el crate `systemicons` por lo contrario: usa `ExtractIconExW`, tope 32 × 32.
+
+**Los accesos directos se resuelven antes por COM** (`IShellLinkW`): se usa el
+ícono que el propio `.lnk` declara y, si no declara ninguno, el del programa al
+que apunta. Se creyó que `SHGetFileInfoW` ya lo hacía solo, y no: un `.lnk` daba
+el ícono de documento en blanco aunque su destino tuviera el suyo. Con la lista
+de aplicaciones del menú Inicio, que es toda accesos directos, ese caso dejó de
+ser raro para ser el normal.
 
 El resultado se cachea en `%LOCALAPPDATA%\MiDeck\cache\icons\`, con clave de
 ruta + fecha de modificación, así que actualizar una app refresca su ícono solo.
