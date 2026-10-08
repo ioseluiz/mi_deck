@@ -37,6 +37,14 @@ pub enum LaunchSpec {
     Keys { combinacion: String },
     /// Teclear un texto literal.
     Type { texto: String },
+    /// Comando del catalogo que se resuelve llamando a la API de Windows.
+    System {
+        command: crate::sistema::SystemCommand,
+    },
+    /// Varias cosas, en orden. Hace falta para abrir un grupo de direcciones con
+    /// el navegador predeterminado, donde no hay una sola linea de comandos que
+    /// las acepte todas.
+    Varios(Vec<LaunchSpec>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -358,6 +366,82 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             })
         }
 
+        Action::Urls {
+            targets,
+            browser,
+            profile,
+            new_window,
+        } => {
+            let limpias: Vec<String> = targets
+                .iter()
+                .map(|t| expand_env(t).trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect();
+
+            if limpias.is_empty() {
+                return Err(LaunchError::Empty { kind: "urls" });
+            }
+            if limpias.len() > MAX_URLS {
+                return Err(LaunchError::Invalid {
+                    motivo: format!(
+                        "Son {} direcciones y el limite es {MAX_URLS}: abrirlas todas \
+                         de golpe deja el equipo inutilizable un buen rato.",
+                        limpias.len()
+                    ),
+                });
+            }
+
+            // El navegador predeterminado se invoca por el shell, que solo acepta
+            // un destino por llamada: se abren una a una y el propio navegador
+            // las agrupa como pestanas.
+            if browser.eq_ignore_ascii_case("default") || browser.trim().is_empty() {
+                return Ok(LaunchSpec::Varios(
+                    limpias
+                        .into_iter()
+                        .map(|target| LaunchSpec::Shell { target })
+                        .collect(),
+                ));
+            }
+
+            let program = programa_de_navegador(browser);
+            let mut args = Vec::new();
+            if let Some(perfil) = profile {
+                if !perfil.trim().is_empty() {
+                    args.push(format!("--profile-directory={perfil}"));
+                }
+            }
+            // Solo los navegadores de la familia Chromium entienden --new-window
+            // junto a una lista de direcciones. Firefox usa otra sintaxis y pasarle
+            // esta haria que no abriera nada, que es peor que ignorar la casilla.
+            if *new_window && es_chromium(&program) {
+                args.push("--new-window".to_string());
+            }
+            args.extend(limpias);
+
+            Ok(LaunchSpec::Process {
+                program,
+                args,
+                workdir: None,
+                no_window: true,
+            })
+        }
+
+        Action::System { command } => {
+            use crate::sistema::Mecanismo;
+            let ficha = crate::sistema::info(*command).ok_or_else(|| LaunchError::Invalid {
+                motivo: format!("La accion de Windows {command:?} ya no esta disponible."),
+            })?;
+            Ok(match ficha.mecanismo {
+                Mecanismo::Teclas(k) => LaunchSpec::Keys {
+                    combinacion: k.to_string(),
+                },
+                Mecanismo::Shell(t) => LaunchSpec::Shell {
+                    target: t.to_string(),
+                },
+                Mecanismo::Api => LaunchSpec::System { command: *command },
+            })
+        }
+
         Action::Path { target } => {
             let target = expand_env(target);
             if target.trim().is_empty() {
@@ -442,6 +526,21 @@ fn programa_de_navegador(browser: &str) -> String {
     }
 }
 
+/// Cuantas direcciones puede abrir una sola tecla.
+///
+/// No es una limitacion tecnica sino de sentido comun: una tecla con doscientas
+/// direcciones no es una tecla util, es un accidente.
+pub const MAX_URLS: usize = 20;
+
+/// Si el ejecutable es de la familia Chromium, que es la que acepta
+/// `--new-window` seguido de una lista de direcciones.
+fn es_chromium(programa: &str) -> bool {
+    let bajo = programa.to_ascii_lowercase();
+    ["chrome", "msedge", "brave", "vivaldi", "opera", "chromium"]
+        .iter()
+        .any(|n| bajo.contains(n))
+}
+
 // -------------------------------------------------------------- verificacion
 
 /// Comprueba que el destino existe antes de lanzar, para poder marcar la tecla y
@@ -460,6 +559,17 @@ pub fn validate(spec: &LaunchSpec) -> Result<(), LaunchError> {
             } else {
                 Ok(())
             }
+        }
+        // El catalogo ya garantiza que el comando existe: lo comprobo
+        // build_launch al construir esta variante.
+        LaunchSpec::System { .. } => Ok(()),
+        // Si una sola parte no es valida, la tecla se marca en rojo entera: mas
+        // vale no abrir nada que abrir la mitad de un grupo de direcciones.
+        LaunchSpec::Varios(partes) => {
+            if partes.is_empty() {
+                return Err(LaunchError::Empty { kind: "urls" });
+            }
+            partes.iter().try_for_each(validate)
         }
         LaunchSpec::Reveal { path } => existe(path),
         LaunchSpec::Shell { target } => {
@@ -494,12 +604,25 @@ fn existe(target: &str) -> Result<(), LaunchError> {
     }
 }
 
-fn es_url(target: &str) -> bool {
-    let bajo = target.to_ascii_lowercase();
-    bajo.starts_with("http://")
-        || bajo.starts_with("https://")
-        || bajo.starts_with("mailto:")
-        || bajo.starts_with("ms-")
+/// Si el destino lleva un esquema (`https:`, `mailto:`, `ms-settings:`) y por
+/// tanto lo abre un protocolo, no el sistema de archivos.
+///
+/// La regla es la de un URI: una letra seguida de letras, digitos, `+`, `-` o
+/// `.`, y luego dos puntos. Se exigen al menos dos caracteres antes de los dos
+/// puntos justo para que una unidad de Windows (`C:\Users`) no cuente como
+/// esquema, que es el unico caso ambiguo en la practica.
+pub fn es_url(target: &str) -> bool {
+    let Some(pos) = target.find(':') else {
+        return false;
+    };
+    if pos < 2 {
+        return false;
+    }
+    let esquema = &target[..pos];
+    esquema.starts_with(|c: char| c.is_ascii_alphabetic())
+        && esquema
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
 }
 
 // ------------------------------------------------------------------ ejecucion
@@ -533,6 +656,20 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
         LaunchSpec::Type { texto } => {
             crate::focus::devolver_foco();
             crate::teclas::escribir(texto)
+        }
+
+        LaunchSpec::System { command } => crate::sistema::ejecutar_api(*command),
+
+        // Se intentan todas aunque una falle: si la tercera direccion de un grupo
+        // esta mal escrita, las otras cinco ya se abrieron y cerrarlas en cadena
+        // seria peor. Se informa de las que fallaron.
+        LaunchSpec::Varios(partes) => {
+            let fallos: Vec<String> = partes.iter().filter_map(|p| execute(p).err()).collect();
+            if fallos.is_empty() {
+                Ok(())
+            } else {
+                Err(fallos.join("; "))
+            }
         }
 
         LaunchSpec::Process {
@@ -577,6 +714,56 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
     }
 }
 
+/// Abre un destino con el programa que le corresponda segun Windows.
+///
+/// Se llama a ShellExecuteW directamente, que es lo que hace el propio
+/// Explorador: resuelve accesos directos, carpetas, la aplicacion predeterminada
+/// de cada extension y los esquemas registrados (`ms-settings:`, `mailto:`).
+///
+/// Se dejo de delegar en el plugin por dos motivos concretos, los dos vistos al
+/// probar la tecla de Configuracion de Windows:
+///   - su `open_path` comprueba antes que el destino exista en disco, asi que un
+///     esquema como `ms-settings:` fallaba con un "no se encuentra el archivo";
+///   - su `open_url` lanza un proceso suelto y da la llamada por buena aunque no
+///     se abra nada, de modo que la tecla no fallaba, simplemente no hacia nada.
+///
+/// ShellExecuteW devuelve un valor menor o igual que 32 cuando falla, asi que un
+/// destino que no se abre marca la tecla en rojo en vez de pasar inadvertido.
+#[cfg(windows)]
+fn open_with_shell(target: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let ancho = |s: &str| -> Vec<u16> {
+        std::ffi::OsStr::new(s).encode_wide().chain(Some(0)).collect()
+    };
+    let destino = ancho(target);
+    let operacion = ancho("open");
+
+    let r = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(operacion.as_ptr()),
+            PCWSTR(destino.as_ptr()),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+
+    let codigo = r.0 as isize;
+    if codigo > 32 {
+        Ok(())
+    } else {
+        Err(format!(
+            "No se pudo abrir {target}: Windows devolvio el codigo {codigo}."
+        ))
+    }
+}
+
+#[cfg(not(windows))]
 fn open_with_shell(target: &str) -> Result<(), String> {
     tauri_plugin_opener::open_path(target, None::<&str>)
         .map_err(|e| format!("No se pudo abrir {target}: {e}"))
@@ -899,6 +1086,235 @@ mod tests {
                 no_window: true,
             }
         );
+    }
+
+    // ------------------------------------------------- destinos con esquema
+
+    #[test]
+    fn un_destino_con_esquema_se_reconoce_como_url() {
+        for t in [
+            "https://ejemplo.test",
+            "http://ejemplo.test",
+            "mailto:alguien@pancanal.com",
+            "ms-settings:",
+            "ms-settings:display",
+            "ms-screenclip:",
+            "teams:",
+        ] {
+            assert!(es_url(t), "{t} deberia tratarse como url");
+        }
+    }
+
+    #[test]
+    fn una_ruta_de_windows_no_es_una_url() {
+        // El caso ambiguo de verdad: una unidad es una letra y dos puntos. Si
+        // contara como esquema, abrir una carpeta dejaria de funcionar.
+        for t in [
+            r"C:\Users\alguien",
+            r"D:\datos\informe.xlsx",
+            r"\\servidor\compartido",
+            "notepad.exe",
+            "informe.pdf",
+            "",
+        ] {
+            assert!(!es_url(t), "{t} no deberia tratarse como url");
+        }
+    }
+
+    #[test]
+    fn ms_settings_no_se_comprueba_contra_el_disco() {
+        // Es la razon del fallo que marcaba en rojo la tecla de Configuracion:
+        // no es una ruta y no tiene por que existir en ningun sitio.
+        let spec = LaunchSpec::Shell {
+            target: "ms-settings:".into(),
+        };
+        assert!(validate(&spec).is_ok());
+    }
+
+    // -------------------------------------------------------- varias urls
+
+    fn urls(targets: &[&str], browser: &str, nueva: bool) -> Action {
+        Action::Urls {
+            targets: targets.iter().map(|t| t.to_string()).collect(),
+            browser: browser.into(),
+            profile: None,
+            new_window: nueva,
+        }
+    }
+
+    #[test]
+    fn varias_urls_en_chrome_van_en_una_sola_llamada() {
+        // Es la razon de ser de la accion: una sola invocacion abre una ventana
+        // con todas las pestanas, en vez de seis ventanas sueltas.
+        let spec = build_launch(&urls(&["https://a", "https://b"], "chrome", true)).unwrap();
+        assert_eq!(
+            spec,
+            LaunchSpec::Process {
+                program: "chrome.exe".into(),
+                args: vec![
+                    "--new-window".into(),
+                    "https://a".into(),
+                    "https://b".into()
+                ],
+                workdir: None,
+                no_window: true,
+            }
+        );
+    }
+
+    #[test]
+    fn el_perfil_va_antes_que_las_direcciones() {
+        let spec = build_launch(&Action::Urls {
+            targets: vec!["https://a".into()],
+            browser: "edge".into(),
+            profile: Some("Profile 1".into()),
+            new_window: false,
+        })
+        .unwrap();
+        let LaunchSpec::Process { args, .. } = spec else {
+            panic!("deberia lanzarse como proceso");
+        };
+        assert_eq!(args, vec!["--profile-directory=Profile 1", "https://a"]);
+    }
+
+    #[test]
+    fn firefox_no_recibe_la_bandera_de_chromium() {
+        // Firefox usa otra sintaxis; pasarle --new-window haria que no abriera
+        // nada, que es peor que ignorar la casilla.
+        let spec = build_launch(&urls(&["https://a"], "firefox", true)).unwrap();
+        let LaunchSpec::Process { args, .. } = spec else {
+            panic!("deberia lanzarse como proceso");
+        };
+        assert_eq!(args, vec!["https://a"]);
+    }
+
+    #[test]
+    fn con_el_navegador_predeterminado_se_abren_una_a_una() {
+        // El shell solo acepta un destino por llamada.
+        let spec = build_launch(&urls(&["https://a", "https://b"], "default", false)).unwrap();
+        assert_eq!(
+            spec,
+            LaunchSpec::Varios(vec![
+                LaunchSpec::Shell {
+                    target: "https://a".into()
+                },
+                LaunchSpec::Shell {
+                    target: "https://b".into()
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn las_lineas_en_blanco_no_cuentan_como_direcciones() {
+        // El campo es un area de texto: sobran saltos de linea al final.
+        let spec = build_launch(&urls(&["  https://a  ", "   ", ""], "default", false)).unwrap();
+        assert_eq!(
+            spec,
+            LaunchSpec::Varios(vec![LaunchSpec::Shell {
+                target: "https://a".into()
+            }])
+        );
+    }
+
+    #[test]
+    fn una_lista_sin_ninguna_direccion_util_da_error() {
+        assert_eq!(
+            build_launch(&urls(&["  ", ""], "chrome", false)),
+            Err(LaunchError::Empty { kind: "urls" })
+        );
+    }
+
+    #[test]
+    fn demasiadas_direcciones_se_rechazan_antes_de_abrir_nada() {
+        let muchas: Vec<String> = (0..MAX_URLS + 1).map(|i| format!("https://s{i}")).collect();
+        let a = Action::Urls {
+            targets: muchas,
+            browser: "chrome".into(),
+            profile: None,
+            new_window: false,
+        };
+        let Err(LaunchError::Invalid { motivo }) = build_launch(&a) else {
+            panic!("deberia rechazarse por exceso");
+        };
+        assert!(motivo.contains("21"), "mensaje poco util: {motivo}");
+    }
+
+    #[test]
+    fn un_grupo_de_urls_se_valida_entero() {
+        // Una sola parte invalida marca la tecla: mas vale no abrir nada que
+        // abrir media lista.
+        let spec = LaunchSpec::Varios(vec![
+            LaunchSpec::Shell {
+                target: "https://a".into(),
+            },
+            LaunchSpec::Shell {
+                target: r"C:\no\existe\jamas.txt".into(),
+            },
+        ]);
+        assert!(validate(&spec).is_err());
+    }
+
+    // ------------------------------------------------------ catalogo windows
+
+    #[test]
+    fn un_comando_de_teclas_del_catalogo_se_convierte_en_envio() {
+        use crate::sistema::SystemCommand;
+        let spec = build_launch(&Action::System {
+            command: SystemCommand::ShowDesktop,
+        })
+        .unwrap();
+        assert_eq!(
+            spec,
+            LaunchSpec::Keys {
+                combinacion: "Win+D".into()
+            }
+        );
+    }
+
+    #[test]
+    fn bloquear_el_equipo_pasa_por_la_api_y_no_por_un_atajo() {
+        // Win+L se puede deshabilitar por politica; LockWorkStation no.
+        use crate::sistema::SystemCommand;
+        let spec = build_launch(&Action::System {
+            command: SystemCommand::Lock,
+        })
+        .unwrap();
+        assert_eq!(
+            spec,
+            LaunchSpec::System {
+                command: SystemCommand::Lock
+            }
+        );
+    }
+
+    #[test]
+    fn la_configuracion_de_windows_se_abre_por_el_shell() {
+        use crate::sistema::SystemCommand;
+        let spec = build_launch(&Action::System {
+            command: SystemCommand::Settings,
+        })
+        .unwrap();
+        assert_eq!(
+            spec,
+            LaunchSpec::Shell {
+                target: "ms-settings:".into()
+            }
+        );
+        // Y no se comprueba contra el disco: ms-settings: no es una ruta.
+        assert!(validate(&spec).is_ok());
+    }
+
+    #[test]
+    fn todo_comando_del_catalogo_produce_un_spec_valido() {
+        // Barre el catalogo entero: si una entrada nueva trae una combinacion
+        // con errata o un destino imposible, salta aqui y no en el equipo de un
+        // usuario.
+        for ficha in crate::sistema::catalogo() {
+            let spec = build_launch(&Action::System { command: ficha.id })
+                .unwrap_or_else(|e| panic!("{:?} no se pudo construir: {e}", ficha.id));
+            validate(&spec).unwrap_or_else(|e| panic!("{:?} no valida: {e}", ficha.id));
+        }
     }
 
     // ------------------------------------------------------- teclas y texto

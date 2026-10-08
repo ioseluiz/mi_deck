@@ -24,10 +24,69 @@ export const ICONOS = {
   keyboard:
     '<svg viewBox="0 0 24 24"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1m2 3v2h2V8zm4 0v2h2V8zm4 0v2h2V8zm4 0v2h2V8zM5 12v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM7 16v2h10v-2z"/></svg>',
   text: '<svg viewBox="0 0 24 24"><path d="M4 4h16v4h-2V6h-5v12h2v2H9v-2h2V6H6v2H4z"/></svg>',
+  pestanas:
+    '<svg viewBox="0 0 24 24"><path d="M2 5h5v3H2zm6 0h5v3H8zm6 0h5v3h-5zM2 9h20v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>',
+
+  // --- catalogo de Windows. Los nombres los fija sistema.rs.
+  camara:
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M9 3h6l1.5 2H21a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.5zm3 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10m0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6"/></svg>',
+  video:
+    '<svg viewBox="0 0 24 24"><path d="M3 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1m14 4.5 5-3.5v10l-5-3.5z"/></svg>',
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+  siguiente:
+    '<svg viewBox="0 0 24 24"><path d="M5 5v14l9-7zM16 5h3v14h-3z"/></svg>',
+  anterior:
+    '<svg viewBox="0 0 24 24"><path d="M19 5v14l-9-7zM5 5h3v14H5z"/></svg>',
+  "volumen-mas":
+    '<svg viewBox="0 0 24 24"><path d="M4 9h3l5-4v14l-5-4H4zm13 1h2v2h2v2h-2v2h-2v-2h-2v-2h2z"/></svg>',
+  "volumen-menos":
+    '<svg viewBox="0 0 24 24"><path d="M4 9h3l5-4v14l-5-4H4zm11 3h6v2h-6z"/></svg>',
+  silencio:
+    '<svg viewBox="0 0 24 24"><path d="M4 9h3l5-4v14l-5-4H4zm11 .4L16.4 8l2.1 2.1L20.6 8 22 9.4l-2.1 2.1 2.1 2.1-1.4 1.4-2.1-2.1-2.1 2.1L15 13.6l2.1-2.1z"/></svg>',
+  candado:
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M12 2a5 5 0 0 0-5 5v3H6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V11a1 1 0 0 0-1-1h-1V7a5 5 0 0 0-5-5m0 2a3 3 0 0 1 3 3v3H9V7a3 3 0 0 1 3-3m0 10a2 2 0 0 1 1 3.7V19h-2v-1.3A2 2 0 0 1 12 14"/></svg>',
+  escritorio:
+    '<svg viewBox="0 0 24 24"><path d="M11 2h2v10h4l-5 6-5-6h4zM3 20h18v2H3z"/></svg>',
+  ventanas:
+    '<svg viewBox="0 0 24 24"><path d="M2 6h2v12H2zm18 0h2v12h-2zM6 4h12a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1"/></svg>',
+  portapapeles:
+    '<svg viewBox="0 0 24 24"><path d="M9 2h6v3H9zM6 4h2v3h8V4h2a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1"/></svg>',
+  emoji:
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M8.5 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3m7 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3M6.8 14h10.4A6 6 0 0 1 6.8 14"/></svg>',
+  "escritorio-izq":
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m10 3.5L8.5 12l4.5 4.5V14h4v-4h-4z"/></svg>',
+  "escritorio-der":
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m8 3.5V10H7v4h4v2.5l4.5-4.5z"/></svg>',
+  monitor:
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 3h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-7v2h3v2H8v-2h3v-2H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1m4 11h2V8H7zm4 0h2V6h-2zm4 0h2v-4h-2z"/></svg>',
+  ajustes:
+    '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M10.1 2h3.8l.4 2.6 2 .8 2.1-1.5 2.7 2.7-1.5 2.1.8 2 2.6.4v3.8l-2.6.4-.8 2 1.5 2.1-2.7 2.7-2.1-1.5-2 .8-.4 2.6h-3.8l-.4-2.6-2-.8-2.1 1.5-2.7-2.7 1.5-2.1-.8-2L2 13.9v-3.8l2.6-.4.8-2-1.5-2.1 2.7-2.7 2.1 1.5 2-.8zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/></svg>',
 };
 
-/** Icono por defecto segun el tipo de accion, cuando la tecla no define uno. */
-function iconoPorAccion(accion) {
+/**
+ * Comando de Windows -> nombre de icono, segun el catalogo que mantiene Rust.
+ *
+ * Se rellena una vez al arrancar cada ventana. Esta vacio hasta entonces, y por
+ * eso `iconoPorAccion` tiene un icono de reserva: la primera pintada no debe
+ * depender de que la llamada haya vuelto.
+ */
+const ICONOS_SISTEMA = new Map();
+
+/** @param {any[]} grupos lo que devuelve `list_system_commands` */
+export function setCatalogoSistema(grupos) {
+  ICONOS_SISTEMA.clear();
+  for (const g of grupos ?? []) {
+    for (const c of g.comandos ?? []) ICONOS_SISTEMA.set(c.id, c.icono);
+  }
+}
+
+/**
+ * Icono por defecto segun el tipo de accion, cuando la tecla no define uno.
+ *
+ * Se exporta porque el editor pinta la misma vista previa: tener dos versiones
+ * de esta eleccion ya hizo que la previa se quedara atras al anadir iconos.
+ */
+export function iconoPorAccion(accion) {
   switch (accion?.type) {
     case "folder":
       return ICONOS.folder;
@@ -41,6 +100,10 @@ function iconoPorAccion(accion) {
       return ICONOS.keyboard;
     case "text":
       return ICONOS.text;
+    case "urls":
+      return ICONOS.pestanas;
+    case "system":
+      return ICONOS[ICONOS_SISTEMA.get(accion.command)] ?? ICONOS.ventanas;
     case "app":
     default:
       return ICONOS.app;

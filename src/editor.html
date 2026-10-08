@@ -22,8 +22,10 @@
             <select id="ed-tipo">
               <option value="app">Abrir una aplicación</option>
               <option value="url">Abrir un sitio web</option>
+              <option value="urls">Abrir varios sitios a la vez</option>
               <option value="path">Abrir una carpeta o archivo</option>
               <option value="script">Ejecutar un script o comando</option>
+              <option value="system">Acción de Windows</option>
               <option value="hotkey">Enviar un atajo de teclado</option>
               <option value="text">Escribir un texto</option>
               <option value="folder">Entrar a una carpeta del deck</option>
@@ -70,6 +72,43 @@
               <span>Perfil <small>(solo Edge y Chrome)</small></span>
               <input id="ed-url-profile" type="text" placeholder="Default, Profile 1…" />
             </label>
+          </div>
+
+          <div class="grupo" data-tipo="urls" hidden>
+            <label class="campo">
+              <span>Direcciones <small>(una por línea)</small></span>
+              <textarea id="ed-urls-targets" rows="6" placeholder="https://correo.ejemplo&#10;https://intranet.ejemplo&#10;https://tablero.ejemplo"></textarea>
+            </label>
+            <label class="campo">
+              <span>Navegador</span>
+              <select id="ed-urls-browser">
+                <option value="default">El predeterminado</option>
+                <option value="edge">Microsoft Edge</option>
+                <option value="chrome">Chrome</option>
+                <option value="firefox">Firefox</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span>Perfil <small>(solo Edge y Chrome)</small></span>
+              <input id="ed-urls-profile" type="text" placeholder="Default, Profile 1…" />
+            </label>
+            <label class="check">
+              <input id="ed-urls-newwindow" type="checkbox" />
+              <span>Abrir en una ventana nueva <small>(solo Edge y Chrome)</small></span>
+            </label>
+            <p class="nota">
+              Las direcciones se abren como pestañas de una misma ventana. No es un
+              grupo de pestañas de Chrome: Chrome no permite abrir un grupo guardado
+              desde fuera, así que estas pestañas salen sueltas, sin etiqueta de color.
+            </p>
+          </div>
+
+          <div class="grupo" data-tipo="system" hidden>
+            <label class="campo">
+              <span>Acción de Windows</span>
+              <select id="ed-system-command"></select>
+            </label>
+            <p class="nota" id="ed-system-aviso" hidden></p>
           </div>
 
           <div class="grupo" data-tipo="path" hidden>

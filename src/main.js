@@ -15,7 +15,7 @@ import {
   ventanaApi,
 } from "./api.js";
 import { Nav } from "./nav.js";
-import { render, renderMigas } from "./grid.js";
+import { render, renderMigas, setCatalogoSistema } from "./grid.js";
 import { abrirMenu, cerrar as cerrarMenu, estaAbierto as menuAbierto } from "./menu.js";
 import { conectarSoltarArchivos, conectarReordenar, huboArrastre } from "./dnd.js";
 
@@ -588,6 +588,10 @@ async function iniciar() {
       "<br><br>Revisa app.withGlobalTauri en tauri.conf.json.</div>";
     return;
   }
+
+  // El catalogo de acciones de Windows trae el icono de cada comando. Se pide
+  // antes de la primera pintada para que ninguna tecla salga con el generico.
+  setCatalogoSistema(await invoke("list_system_commands"));
 
   const vista = await invoke("get_deck");
   nav = new Nav(vista.deck);

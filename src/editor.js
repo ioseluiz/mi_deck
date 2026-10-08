@@ -12,7 +12,23 @@
  */
 
 import { invoke, urlDeArchivo, apiDisponible } from "./api.js";
-import { ICONOS } from "./grid.js";
+import { iconoPorAccion, setCatalogoSistema } from "./grid.js";
+
+/**
+ * Catalogo de acciones de Windows tal cual lo devuelve Rust: una lista de
+ * grupos, cada uno con su etiqueta y sus comandos. El editor no escribe ni un
+ * nombre de accion ni un titulo de grupo.
+ */
+let CATALOGO_SISTEMA = [];
+
+/** Ficha de un comando del catalogo, o null si no esta. */
+function fichaSistema(id) {
+  for (const g of CATALOGO_SISTEMA) {
+    const c = (g.comandos ?? []).find((x) => x.id === id);
+    if (c) return c;
+  }
+  return null;
+}
 
 // El contexto llega por comando, no por la URL: Tauri resuelve el recurso
 // incluyendo la cadena de consulta, asi que editor.html?modo=... no existe como
@@ -83,14 +99,10 @@ function pintarPrevia() {
     contenido = `<span class="pastilla" style="background:hsl(${h} 48% 40%)">${escapar(
       (dom[0] || "?").toUpperCase()
     )}</span>`;
-  } else if (tecla.action?.type === "hotkey") {
-    contenido = ICONOS.keyboard;
-  } else if (tecla.action?.type === "text") {
-    contenido = ICONOS.text;
   } else {
-    // El mapa viene de grid.js: antes habia aqui un SVG escrito a mano y la
-    // vista previa se quedaba atras cada vez que se anadia un icono.
-    contenido = ICONOS.app;
+    // La misma funcion que usa el panel: antes habia aqui un SVG escrito a mano
+    // y la vista previa se quedaba atras cada vez que se anadia un icono.
+    contenido = iconoPorAccion(tecla.action);
   }
 
   prev.innerHTML =
@@ -99,6 +111,38 @@ function pintarPrevia() {
 }
 
 // ------------------------------------------------------- formulario de tecla
+
+/**
+ * Rellena el desplegable de acciones de Windows con los grupos del catalogo.
+ *
+ * Los `<optgroup>` salen tal cual de Rust: anadir una accion alla la hace
+ * aparecer aqui sin tocar este archivo.
+ */
+function montarCatalogoSistema() {
+  $("ed-system-command").innerHTML = CATALOGO_SISTEMA.map(
+    (g) =>
+      `<optgroup label="${escapar(g.etiqueta)}">` +
+      (g.comandos ?? [])
+        .map((c) => `<option value="${escapar(c.id)}">${escapar(c.etiqueta)}</option>`)
+        .join("") +
+      "</optgroup>"
+  ).join("");
+}
+
+/**
+ * Muestra la limitacion real del comando elegido, si la tiene.
+ *
+ * La grabacion de pantalla depende de la Barra de juegos y no graba el
+ * Explorador ni el escritorio. Vale mas decirlo aqui que dejar al usuario
+ * pensando que la tecla esta rota.
+ */
+function mostrarAvisoSistema() {
+  const nota = $("ed-system-aviso");
+  if (!nota) return;
+  const aviso = fichaSistema($("ed-system-command")?.value)?.aviso ?? "";
+  nota.textContent = aviso;
+  nota.hidden = !aviso;
+}
 
 /** Muestra solo el grupo de campos del tipo de accion elegido. */
 function mostrarGrupo(tipo) {
@@ -122,6 +166,14 @@ function volcarEnFormulario() {
   $("ed-url-target").value = tipo === "url" ? a.target ?? "" : "";
   $("ed-url-browser").value = tipo === "url" ? a.browser ?? "default" : "default";
   $("ed-url-profile").value = tipo === "url" ? a.profile ?? "" : "";
+
+  $("ed-urls-targets").value = tipo === "urls" ? (a.targets ?? []).join("\n") : "";
+  $("ed-urls-browser").value = tipo === "urls" ? a.browser ?? "default" : "default";
+  $("ed-urls-profile").value = tipo === "urls" ? a.profile ?? "" : "";
+  $("ed-urls-newwindow").checked = tipo === "urls" && Boolean(a.new_window);
+
+  if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
+  mostrarAvisoSistema();
 
   $("ed-path-target").value = tipo === "path" ? a.target ?? "" : "";
 
@@ -164,6 +216,23 @@ function leerFormulario() {
         browser: $("ed-url-browser").value,
         profile: $("ed-url-profile").value.trim() || null,
       };
+      break;
+    case "urls":
+      tecla.action = {
+        type: "urls",
+        // Una direccion por linea. Las vacias se descartan aqui para que el
+        // contador de la etiqueta y el limite de Rust cuenten lo mismo.
+        targets: $("ed-urls-targets")
+          .value.split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean),
+        browser: $("ed-urls-browser").value,
+        profile: $("ed-urls-profile").value.trim() || null,
+        new_window: $("ed-urls-newwindow").checked,
+      };
+      break;
+    case "system":
+      tecla.action = { type: "system", command: $("ed-system-command").value };
       break;
     case "path":
       tecla.action = { type: "path", target: $("ed-path-target").value.trim() };
@@ -346,9 +415,13 @@ async function guardar() {
         folder: !m.action.surface && "Elige una carpeta destino.",
         hotkey: !m.action.keys?.trim() && "Escribe la combinación de teclas.",
         text: !m.action.text && "Escribe el texto que debe teclear.",
+        urls: !m.action.targets?.length && "Escribe al menos una dirección.",
+        system: !m.action.command && "Elige una acción de Windows.",
       }[m.action.type];
       if (faltante) throw new Error(faltante);
-      if (!(m.action.type in { folder: 1, hotkey: 1, text: 1 }) && !m.action.target) {
+      // La lista es de los tipos que SI usan `target`, no de los que no: asi un
+      // tipo nuevo no queda bloqueado por olvidarse de excluirlo aquí.
+      if (USAN_TARGET.has(m.action.type) && !m.action.target) {
         throw new Error("Falta el destino de la acción.");
       }
       if (!m.label) m.label = etiquetaPorDefecto(m.action);
@@ -365,17 +438,32 @@ async function guardar() {
   }
 }
 
+/** Tipos de accion cuyo campo obligatorio se llama `target`. */
+const USAN_TARGET = new Set(["app", "url", "path", "script"]);
+
+/** Dominio legible de una direccion, para las etiquetas automaticas. */
+function dominioDe(url) {
+  return ((url ?? "").split("//").pop() ?? "").split("/")[0].replace(/^www\./, "");
+}
+
 /** Si el usuario no puso etiqueta, deducir una del destino. */
 function etiquetaPorDefecto(action) {
   if (action.type === "hotkey") return action.keys ?? "Atajo";
+  if (action.type === "system") {
+    return fichaSistema(action.command)?.etiqueta ?? "Acción de Windows";
+  }
+  if (action.type === "urls") {
+    const n = action.targets?.length ?? 0;
+    if (!n) return "Varias páginas";
+    const primera = dominioDe(action.targets[0]);
+    return n === 1 ? primera : `${primera} +${n - 1}`;
+  }
   if (action.type === "text") {
     const t = (action.text ?? "").trim().split(/\s+/).slice(0, 3).join(" ");
     return t.slice(0, 24) || "Texto";
   }
   const t = action.target ?? "";
-  if (action.type === "url") {
-    return (t.split("//").pop() ?? t).split("/")[0].replace(/^www\./, "");
-  }
+  if (action.type === "url") return dominioDe(t);
   const trozos = t.split(/[\\/]/);
   const nombre = trozos[trozos.length - 1] || t;
   return nombre.replace(/\.(exe|lnk|ps1|bat|cmd)$/i, "") || "Sin nombre";
@@ -463,6 +551,7 @@ function conectar() {
     "ed-fit",
     "ed-labelstyle",
     "ed-url-target",
+    "ed-urls-targets",
     "ed-hotkey-keys",
     "ed-text-texto",
   ]) {
@@ -471,6 +560,18 @@ function conectar() {
       pintarPrevia();
     });
   }
+
+  $("ed-system-command").addEventListener("change", () => {
+    mostrarAvisoSistema();
+    leerFormulario();
+    // La etiqueta de una accion de Windows es su nombre del catalogo: se pone
+    // sola mientras el usuario no escriba otra.
+    if (!$("ed-label").value) {
+      $("ed-label").value = etiquetaPorDefecto(tecla.action);
+      leerFormulario();
+    }
+    pintarPrevia();
+  });
 
   $("ed-bg").addEventListener("input", () => {
     tecla.icon.background = $("ed-bg").value;
@@ -581,6 +682,12 @@ async function iniciar() {
     await cargarAjustes(vista);
   } else {
     $("vista-tecla").hidden = false;
+
+    // El catalogo tiene que estar antes de volcar el formulario: de el salen el
+    // desplegable, el icono de la vista previa y la etiqueta automatica.
+    CATALOGO_SISTEMA = await invoke("list_system_commands");
+    setCatalogoSistema(CATALOGO_SISTEMA);
+    montarCatalogoSistema();
 
     const superficies = await invoke("list_surfaces");
     $("ed-folder-surface").innerHTML = superficies

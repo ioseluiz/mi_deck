@@ -251,6 +251,24 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         profile: Option<String>,
     },
+    /// Abre varias direcciones de una vez, como pestanas de una misma ventana.
+    ///
+    /// Existe porque la peticion recurrente es "una tecla que me abra las seis
+    /// paginas con las que trabajo". Chrome no permite abrir un grupo de
+    /// pestanas guardado desde fuera -- no hay opcion de linea de comandos ni
+    /// esquema de URL para eso -- pero si acepta varias direcciones de golpe, y
+    /// eso cubre el caso real.
+    Urls {
+        #[serde(default, deserialize_with = "uno_o_varios")]
+        targets: Vec<String>,
+        #[serde(default = "default_browser")]
+        browser: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
+        /// Ventana nueva en vez de pestanas en la que ya hubiera abierta.
+        #[serde(default)]
+        new_window: bool,
+    },
     /// Abre una carpeta o archivo en el Explorador de Windows.
     /// Ojo: distinto de `Folder`, que navega dentro del propio deck.
     Path { target: String },
@@ -275,6 +293,14 @@ pub enum Action {
 
     /// Teclea un texto literal en la aplicacion que estuviera delante.
     Text { text: String },
+
+    /// Accion del catalogo de Windows: multimedia, volumen, bloquear, capturar.
+    ///
+    /// El catalogo vive en `sistema.rs` y dice como se lleva a cabo cada una;
+    /// aqui solo se guarda cual es.
+    System {
+        command: crate::sistema::SystemCommand,
+    },
 }
 
 fn default_browser() -> String {
@@ -295,11 +321,13 @@ impl Action {
         match self {
             Action::App { .. } => "app",
             Action::Url { .. } => "url",
+            Action::Urls { .. } => "urls",
             Action::Path { .. } => "path",
             Action::Script { .. } => "script",
             Action::Folder { .. } => "folder",
             Action::Hotkey { .. } => "hotkey",
             Action::Text { .. } => "text",
+            Action::System { .. } => "system",
         }
     }
 }

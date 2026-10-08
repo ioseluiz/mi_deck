@@ -13,6 +13,7 @@ pub mod launcher;
 pub mod model;
 pub mod nivel;
 pub mod screen;
+pub mod sistema;
 pub mod store;
 pub mod teclas;
 
@@ -77,9 +78,11 @@ fn destino_para_icono(action: &Action) -> Option<PathBuf> {
         Action::Script { target, .. } => target,
         // Estas no tienen archivo del que sacar un icono: lo pone el frontend.
         Action::Url { .. }
+        | Action::Urls { .. }
         | Action::Folder { .. }
         | Action::Hotkey { .. }
-        | Action::Text { .. } => return None,
+        | Action::Text { .. }
+        | Action::System { .. } => return None,
     };
 
     let expandido = launcher::expand_env(crudo);
@@ -750,6 +753,16 @@ fn list_surfaces(state: State<AppState>) -> Vec<SurfaceInfo> {
     v
 }
 
+/// Catalogo de acciones de Windows, agrupado por familia.
+///
+/// Lo pide el editor para construir su desplegable y el panel para saber que
+/// icono le toca a cada comando. Sale de Rust y no de una copia en JavaScript
+/// para que no haya dos listas que puedan separarse.
+#[tauri::command]
+fn list_system_commands() -> Vec<sistema::Grupo> {
+    sistema::agrupado()
+}
+
 /// Avisa a todas las ventanas de que el deck cambio, para que se repinten.
 #[tauri::command]
 fn notify_deck_changed(app: AppHandle) {
@@ -1040,6 +1053,7 @@ pub fn run() {
             editor_context,
             close_editor,
             list_surfaces,
+            list_system_commands,
             notify_deck_changed
         ])
         .setup(move |app| {

@@ -245,6 +245,7 @@ al pintar y no se guarda en el archivo.
 |---|---|---|
 | `app` | Lanza un `.exe` o `.lnk` | `target`, `args`, `workdir`, `focus_if_running` |
 | `url` | Abre una dirección web | `target`, `browser` (`default`, `edge`, `chrome`, `firefox` o ruta a un `.exe`), `profile` |
+| `urls` | Abre varias direcciones de una vez | `targets` (lista), `browser`, `profile`, `new_window` |
 
 Con `browser` distinto de `default`, el navegador se busca primero en el `PATH` y
 después en `App Paths` del registro. Hace falta lo segundo: Edge y Chrome **no** se
@@ -256,6 +257,47 @@ ejecutable se resuelve a su ruta completa antes de lanzarlo.
 | `folder` | Navega a otra superficie del deck | `surface` |
 | `hotkey` | Envía una combinación de teclas | `keys` |
 | `text` | Teclea un texto literal | `text` |
+| `system` | Acción del catálogo de Windows | `command` |
+
+### Varias direcciones en una tecla
+
+La acción `urls` abre una lista de direcciones de golpe, que es lo que casi
+siempre se busca cuando alguien pide "abrir mi grupo de pestañas". Con Edge o
+Chrome se lanza **una sola vez** con todas las direcciones, de modo que salen como
+pestañas de la misma ventana; con `new_window` en una ventana nueva. Con el
+navegador predeterminado se abren una a una, porque el shell solo acepta un
+destino por llamada.
+
+**No es un grupo de pestañas de Chrome.** Chrome no permite abrir un grupo
+guardado desde fuera: no hay opción de línea de comandos ni esquema de URL para
+eso, ni en MiDeck ni en ningún otro lanzador. Las pestañas salen sueltas, sin
+etiqueta de color. Para un grupo de verdad, la única vía es un perfil de Chrome
+por contexto y una acción `app` con `--profile-directory`.
+
+El límite son 20 direcciones por tecla.
+
+### Acciones de Windows
+
+La acción `system` toma su `command` de un catálogo que vive en
+`src-tauri/src/sistema.rs`. El editor construye su desplegable pidiéndoselo a Rust
+con `list_system_commands`, así que añadir una acción es una línea en ese archivo
+y no hay una segunda lista en JavaScript que se pueda quedar desfasada.
+
+| Familia | `command` |
+|---|---|
+| Captura | `screenshot_region`, `screen_record` |
+| Multimedia y volumen | `media_play_pause`, `media_next`, `media_prev`, `volume_up`, `volume_down`, `volume_mute` |
+| Sistema | `lock`, `show_desktop`, `task_view`, `clipboard_history`, `emoji_picker`, `desktop_prev`, `desktop_next`, `file_explorer`, `task_manager`, `settings` |
+
+Casi todas se llevan a cabo enviando una combinación, igual que `hotkey`. Dos no:
+`settings` abre `ms-settings:` por el shell, y `lock` llama a `LockWorkStation` en
+lugar de enviar `Win+L`, porque ese atajo se puede deshabilitar por directiva y en
+un equipo gestionado eso es un riesgo real.
+
+**Límite honesto de `screen_record`:** delega en la Barra de juegos de Xbox. No
+graba el Explorador de archivos ni el escritorio, solo ventanas de aplicación, y si
+está deshabilitada por directiva la tecla no hará nada. El editor lo advierte en el
+propio formulario.
 
 ### Atajos y texto
 
@@ -289,7 +331,7 @@ dejar diez Outlooks.
 |---|---|---|
 | `image` | `file` | Nombre dentro de la biblioteca (ver abajo). |
 | `auto` | — | Extrae el ícono de shell del destino. Para una acción `url` dibuja una pastilla con la inicial del dominio. |
-| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file`, `keyboard`, `text` | |
+| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file`, `keyboard`, `text`, `pestanas`, `camara`, `video`, `play`, `siguiente`, `anterior`, `volumen-mas`, `volumen-menos`, `silencio`, `candado`, `escritorio`, `ventanas`, `portapapeles`, `emoji`, `escritorio-izq`, `escritorio-der`, `monitor`, `ajustes` | |
 | `emoji` | `char` | |
 
 Comunes a todos:
