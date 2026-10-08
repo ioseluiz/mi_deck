@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# .cargo/config.toml apunta el directorio de compilacion a una ruta local, fuera
+# de OneDrive. Esa ruta no existe en el runner, asi que se sobrescribe aqui: la
+# variable de entorno tiene precedencia sobre el archivo de configuracion.
+env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+
 jobs:
   verificar:
     runs-on: windows-latest

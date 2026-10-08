@@ -1,5 +1,7 @@
 # MiDeck
 
+[github.com/ioseluiz/mi_deck](https://github.com/ioseluiz/mi_deck)
+
 Widget de escritorio tipo Stream Deck para Windows. Un panel flotante de teclas que
 abren aplicaciones, sitios web, carpetas y scripts con un clic. Funciona 100 % en
 local: no usa red, no tiene cuenta y es inmune al proxy institucional.
@@ -8,17 +10,60 @@ Rust + Tauri 2. El frontend son módulos ES sin bundler ni `node_modules`.
 
 ## Estado
 
-**Fases 1, 2 y 3 completas** — navegación con carpetas anidadas, las cuatro
+**Completo.** Fases 1 a 4: navegación con carpetas anidadas, las cuatro
 acciones, imágenes propias por tecla, íconos extraídos de los `.exe`, bandeja del
 sistema, instancia única, persistencia de posición, y edición completa desde la
 interfaz: menú contextual, editor de teclas con vista previa en vivo, ajustes,
-reordenar arrastrando y soltar archivos desde el Explorador. Pendiente la fase 4
-(instalador NSIS y publicación).
+reordenar arrastrando y soltar archivos desde el Explorador, e instalador NSIS
+que no pide permisos de administrador.
 
 Editar `deck.json` a mano sigue siendo posible: `Ctrl+E` lo abre y `F5` lo recarga
 sin reiniciar.
 
-## Requisitos
+## Instalar
+
+Descarga `MiDeck_<version>_x64-setup.exe` de la
+[página de releases](https://github.com/ioseluiz/mi_deck/releases) y ejecútalo.
+
+Se instala en `%LOCALAPPDATA%\MiDeck` y **no pide permisos de administrador**: el
+desinstalador queda registrado en `HKCU`, no en la máquina. Requiere WebView2
+Runtime, que viene de serie en Windows 11.
+
+Medido en la versión de producción:
+
+| | |
+|---|---|
+| Instalador | 2,2 MB |
+| Ejecutable | 6,8 MB |
+| Arranque en frío hasta ver la ventana | ~0,66 s |
+| Memoria en reposo | ~30 MB el proceso, más ~126 MB de su WebView2 |
+
+La memoria del WebView2 es el precio de usar un motor web para la interfaz; el
+*working set* además sobreestima, porque buena parte se comparte con otros
+procesos WebView2 del sistema.
+
+## Compilar
+
+```powershell
+cargo tauri build
+```
+
+Deja el instalador en `<target>\release\bundle\nsis\`.
+
+## Publicar
+
+Al empujar una etiqueta de versión, GitHub Actions comprueba formato, clippy y
+pruebas, compila el instalador y crea la release con el `.exe` adjunto:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+El workflow sobrescribe `CARGO_TARGET_DIR`, porque `.cargo/config.toml` apunta a
+una ruta local que en el runner no existe.
+
+## Requisitos de desarrollo
 
 Ya presentes en el equipo de desarrollo: Rust (toolchain `stable-x86_64-pc-windows-msvc`),
 VS Build Tools con el componente C++, WebView2 Runtime y `tauri-cli`.
@@ -40,7 +85,7 @@ Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura
 ## Comprobaciones
 
 ```powershell
-cargo test                      # 57 pruebas: store, integridad, lanzador, imágenes, íconos, edición
+cargo test                      # 59 pruebas: store, integridad, lanzador, imágenes, íconos, edición
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
 ```
@@ -65,6 +110,7 @@ cargo fmt -- --check
 | Soltar una imagen sobre una tecla | Le cambia la cara, sin tocar su acción |
 | `Ctrl+V` con el cursor sobre una tecla | Pega la imagen del portapapeles |
 | Chincheta de la barra de título | Fija o suelta "siempre encima" |
+| Logo de GitHub en el pie | Abre el repositorio en el navegador |
 | Arrastrar la barra de título | Mueve el panel |
 | Cerrar con la X | Oculta a la bandeja; **no** sale |
 | Clic izquierdo en el ícono de bandeja | Muestra u oculta el panel |
@@ -135,7 +181,7 @@ al pintar y no se guarda en el archivo.
 
 | `type` | Qué hace | Campos |
 |---|---|---|
-| `app` | Lanza un `.exe` o `.lnk` | `target`, `args`, `workdir` |
+| `app` | Lanza un `.exe` o `.lnk` | `target`, `args`, `workdir`, `focus_if_running` |
 | `url` | Abre una dirección web | `target`, `browser` (`default`, `edge`, `chrome`, `firefox` o ruta a un `.exe`), `profile` |
 | `path` | Abre una carpeta, o revela un archivo seleccionado, en el Explorador | `target` |
 | `script` | Ejecuta un script o comando | `shell` (`powershell`/`cmd`), `target`, `args`, `hidden` |
@@ -150,6 +196,10 @@ qué falló en vez de dejar una ruta rota e inexplicable.
 
 En `script`, si `target` termina en `.ps1` se ejecuta con `-File`; si no, se trata como
 un comando suelto con `-Command`. Con `hidden: true` no aparece ninguna ventana.
+
+Con `focus_if_running: true`, si ya hay una ventana de ese ejecutable abierta se
+trae al frente en lugar de lanzar otra copia: pulsar "Outlook" diez veces no debe
+dejar diez Outlooks.
 
 ### Tipos de ícono
 
@@ -231,6 +281,7 @@ src/                    frontend: módulos ES, sin build
 src-tauri/src/
   model.rs              structs serde del deck
   edit.rs               mutaciones puras: crear, mover, duplicar, borrar
+  focus.rs              traer al frente una app ya abierta
   store.rs              deck.json: carga, guardado atómico, respaldo
   integrity.rs          referencias rotas, ciclos, superficies huérfanas
   launcher.rs           build_launch() puro + execute()
