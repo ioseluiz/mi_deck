@@ -225,6 +225,27 @@ pub fn delete(file: &str) -> Result<(), ImageError> {
     Ok(())
 }
 
+/// Cara apropiada para una tecla recien creada a partir de un archivo soltado.
+///
+/// Si el archivo es una imagen, se importa y la tecla la muestra. Dejarla en
+/// `auto` daria el icono de shell del tipo de archivo, es decir el mismo logo
+/// generico de Windows para cualquier PNG: inservible para distinguir teclas,
+/// que es justo para lo que estan las imagenes.
+pub fn icono_para(path: &Path) -> crate::model::Icon {
+    use crate::model::{Icon, IconSource};
+    if !es_imagen(path) {
+        return Icon::default();
+    }
+    match import(path) {
+        Ok(file) => Icon {
+            source: IconSource::Image { file },
+            ..Icon::default()
+        },
+        // Si no se pudo importar, mejor una tecla con icono generico que ninguna.
+        Err(_) => Icon::default(),
+    }
+}
+
 /// Si la ruta parece una imagen, por extension. Lo usa el manejo de arrastre para
 /// decidir si soltar un archivo cambia la cara de una tecla o crea un boton.
 pub fn es_imagen(path: &Path) -> bool {
@@ -370,6 +391,30 @@ mod tests {
         assert_eq!(sueltas.len(), 1);
         assert_eq!(sueltas[0].file, suelta);
         assert!(sueltas[0].bytes > 0);
+    }
+
+    #[test]
+    fn soltar_una_imagen_da_una_tecla_que_muestra_esa_imagen() {
+        use crate::model::IconSource;
+        let (dir, _g) = aislar("icono_para");
+        let src = escribir_png(&dir, "logo.png", 120, 120, 255);
+
+        let icono = icono_para(&src);
+        let IconSource::Image { file } = &icono.source else {
+            panic!(
+                "una imagen soltada debe quedar como cara de la tecla, no como icono automatico"
+            );
+        };
+        assert!(resolve(file).exists());
+    }
+
+    #[test]
+    fn soltar_algo_que_no_es_imagen_deja_el_icono_automatico() {
+        use crate::model::IconSource;
+        let (dir, _g) = aislar("icono_para_exe");
+        let src = dir.join("programa.exe");
+        fs::write(&src, b"MZ").unwrap();
+        assert!(matches!(icono_para(&src).source, IconSource::Auto));
     }
 
     #[test]

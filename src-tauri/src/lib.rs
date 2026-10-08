@@ -532,7 +532,8 @@ fn drop_paths(
                 id: edit::nuevo_id(deck, "b"),
                 position: celda,
                 label: etiqueta,
-                icon: model::Icon::default(),
+                // Una imagen soltada se convierte en la cara de su propia tecla.
+                icon: images::icono_para(p),
                 action,
             };
             edit::upsert_button(deck, &surface_id, page, boton)?;
