@@ -40,6 +40,12 @@ pub enum SystemCommand {
     FileExplorer,
     TaskManager,
     Settings,
+    // --- energia. Todas exigen doble confirmacion.
+    Sleep,
+    SignOut,
+    Restart,
+    Shutdown,
+    EmptyRecycleBin,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -48,6 +54,8 @@ pub enum Familia {
     Captura,
     Multimedia,
     Sistema,
+    /// Acciones que cierran sesion, apagan o borran. Todas piden confirmacion.
+    Energia,
 }
 
 impl Familia {
@@ -57,12 +65,18 @@ impl Familia {
             Familia::Captura => "Captura de pantalla",
             Familia::Multimedia => "Multimedia y volumen",
             Familia::Sistema => "Sistema",
+            Familia::Energia => "Energia (piden confirmacion)",
         }
     }
 
     /// En el orden en que aparecen en el desplegable.
-    pub fn todas() -> [Familia; 3] {
-        [Familia::Captura, Familia::Multimedia, Familia::Sistema]
+    pub fn todas() -> [Familia; 4] {
+        [
+            Familia::Captura,
+            Familia::Multimedia,
+            Familia::Sistema,
+            Familia::Energia,
+        ]
     }
 }
 
@@ -118,9 +132,25 @@ const fn c(
     }
 }
 
-use Familia::{Captura, Multimedia, Sistema};
+use Familia::{Captura, Energia, Multimedia, Sistema};
 use Mecanismo::{Api, Capturar, Shell, Teclas};
 use SystemCommand as S;
+
+/// Como `c`, pero marcando la accion como peligrosa. Lo que distingue a estas no
+/// es que fallen, sino que aciertan: una pulsacion sin querer apaga el equipo con
+/// el trabajo abierto.
+const fn p(
+    id: SystemCommand,
+    etiqueta: &'static str,
+    icono: &'static str,
+    aviso: &'static str,
+) -> ComandoInfo {
+    ComandoInfo {
+        peligroso: true,
+        aviso: Some(aviso),
+        ..c(id, etiqueta, Energia, icono, Api)
+    }
+}
 
 /// El catalogo completo. Una linea por accion.
 const CATALOGO: &[ComandoInfo] = &[
@@ -286,6 +316,37 @@ const CATALOGO: &[ComandoInfo] = &[
         "ajustes",
         Shell("ms-settings:"),
     ),
+    // ------------------------------------------------------------- energia
+    p(
+        S::Sleep,
+        "Suspender el equipo",
+        "luna",
+        "Pide confirmacion: hay que pulsar la tecla dos veces.",
+    ),
+    p(
+        S::SignOut,
+        "Cerrar sesion",
+        "salir",
+        "Cierra tus aplicaciones. Guarda antes lo que tengas abierto.",
+    ),
+    p(
+        S::Restart,
+        "Reiniciar",
+        "reiniciar",
+        "Cierra tus aplicaciones. Guarda antes lo que tengas abierto.",
+    ),
+    p(
+        S::Shutdown,
+        "Apagar",
+        "apagar",
+        "Cierra tus aplicaciones. Guarda antes lo que tengas abierto.",
+    ),
+    p(
+        S::EmptyRecycleBin,
+        "Vaciar la papelera",
+        "papelera",
+        "Borra definitivamente lo que haya en la papelera. No se puede deshacer.",
+    ),
 ];
 
 pub fn catalogo() -> &'static [ComandoInfo] {
@@ -330,13 +391,140 @@ pub fn agrupado() -> Vec<Grupo> {
 /// Comandos que se resuelven llamando a la API de Windows.
 #[cfg(windows)]
 pub fn ejecutar_api(cmd: SystemCommand) -> Result<(), String> {
+    use windows::Win32::System::Shutdown::{
+        ExitWindowsEx, LockWorkStation, EWX_LOGOFF, EWX_REBOOT, EWX_SHUTDOWN, SHUTDOWN_REASON,
+    };
+
+    // Razon registrada en el visor de eventos. Sin ella, el apagado aparece como
+    // "otro (sin planificar)" y ensucia el historial del equipo.
+    // SHTDN_REASON_FLAG_PLANNED. La parte mayor y la menor son
+    // SHTDN_REASON_MAJOR_OTHER y _MINOR_OTHER, que valen cero y no hace falta
+    // sumarlas.
+    const RAZON: u32 = 0x8000_0000;
+    // Solo fuerza el cierre de las aplicaciones colgadas. Sin EWX_FORCE: una
+    // tecla no tiene por que tirar por la borda el trabajo sin guardar de nadie.
+    const SI_CUELGA: u32 = 0x0000_0010; // EWX_FORCEIFHUNG
+
     match cmd {
         SystemCommand::Lock => unsafe {
-            windows::Win32::System::Shutdown::LockWorkStation()
-                .map_err(|e| format!("No se pudo bloquear el equipo: {e}"))
+            LockWorkStation().map_err(|e| format!("No se pudo bloquear el equipo: {e}"))
         },
+
+        SystemCommand::Sleep => suspender(),
+
+        SystemCommand::SignOut => unsafe {
+            // Cerrar sesion no necesita privilegio; apagar y reiniciar si.
+            ExitWindowsEx(EWX_LOGOFF, SHUTDOWN_REASON(RAZON))
+                .map_err(|e| format!("No se pudo cerrar la sesion: {e}"))
+        },
+
+        SystemCommand::Restart => unsafe {
+            habilitar_privilegio_de_apagado()?;
+            ExitWindowsEx(
+                windows::Win32::System::Shutdown::EXIT_WINDOWS_FLAGS(EWX_REBOOT.0 | SI_CUELGA),
+                SHUTDOWN_REASON(RAZON),
+            )
+            .map_err(|e| format!("No se pudo reiniciar: {e}"))
+        },
+
+        SystemCommand::Shutdown => unsafe {
+            habilitar_privilegio_de_apagado()?;
+            ExitWindowsEx(
+                windows::Win32::System::Shutdown::EXIT_WINDOWS_FLAGS(EWX_SHUTDOWN.0 | SI_CUELGA),
+                SHUTDOWN_REASON(RAZON),
+            )
+            .map_err(|e| format!("No se pudo apagar: {e}"))
+        },
+
+        SystemCommand::EmptyRecycleBin => vaciar_papelera(),
+
         otro => Err(format!("{otro:?} no se ejecuta por API.")),
     }
+}
+
+/// Suspende el equipo.
+///
+/// El primer parametro es "hibernar": en falso, suspension normal. El tercero es
+/// "deshabilitar los eventos de reanudacion", que se deja en falso para no
+/// cambiarle al usuario como se despierta su equipo.
+#[cfg(windows)]
+fn suspender() -> Result<(), String> {
+    use windows::Win32::System::Power::SetSuspendState;
+    let ok = unsafe { SetSuspendState(false, false, false) };
+    if ok.as_bool() {
+        Ok(())
+    } else {
+        Err("Windows rechazo suspender el equipo.".to_string())
+    }
+}
+
+/// Apagar y reiniciar exigen el privilegio SeShutdownPrivilege, que un proceso
+/// tiene concedido pero **deshabilitado** de nacimiento. Sin activarlo,
+/// `ExitWindowsEx` falla con "no se tienen los privilegios necesarios" y la tecla
+/// parece rota sin motivo aparente.
+#[cfg(windows)]
+fn habilitar_privilegio_de_apagado() -> Result<(), String> {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
+    use windows::Win32::Security::{
+        AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
+        TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            &mut token,
+        )
+        .map_err(|e| format!("No se pudo abrir el token del proceso: {e}"))?;
+
+        let mut luid = LUID::default();
+        let resultado = LookupPrivilegeValueW(
+            windows::core::PCWSTR::null(),
+            windows::core::w!("SeShutdownPrivilege"),
+            &mut luid,
+        )
+        .map_err(|e| format!("No se encontro el privilegio de apagado: {e}"))
+        .and_then(|_| {
+            let privilegios = TOKEN_PRIVILEGES {
+                PrivilegeCount: 1,
+                Privileges: [LUID_AND_ATTRIBUTES {
+                    Luid: luid,
+                    Attributes: SE_PRIVILEGE_ENABLED,
+                }],
+            };
+            AdjustTokenPrivileges(token, false, Some(&privilegios), 0, None, None)
+                .map_err(|e| format!("No se pudo habilitar el privilegio de apagado: {e}"))
+        });
+
+        let _ = CloseHandle(token);
+        resultado
+    }
+}
+
+/// Vacia la papelera de todas las unidades, sin dialogo ni sonido.
+///
+/// Sin confirmacion de Windows a proposito: la confirmacion ya la hizo el usuario
+/// pulsando la tecla dos veces, y encadenar dos preguntas para lo mismo acaba en
+/// que nadie lee ninguna.
+#[cfg(windows)]
+fn vaciar_papelera() -> Result<(), String> {
+    use windows::Win32::UI::Shell::{
+        SHEmptyRecycleBinW, SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND,
+    };
+
+    // La papelera ya vacia devuelve S_FALSE, que windows-rs considera Ok: no es
+    // un fallo y no hay que distinguirlo.
+    unsafe {
+        SHEmptyRecycleBinW(
+            None,
+            windows::core::PCWSTR::null(),
+            SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
+        )
+    }
+    .map_err(|e| format!("No se pudo vaciar la papelera: {e}"))
 }
 
 #[cfg(not(windows))]
@@ -373,6 +561,11 @@ mod tests {
             S::FileExplorer,
             S::TaskManager,
             S::Settings,
+            S::Sleep,
+            S::SignOut,
+            S::Restart,
+            S::Shutdown,
+            S::EmptyRecycleBin,
         ];
         for cmd in &v {
             match cmd {
@@ -395,7 +588,12 @@ mod tests {
                 | S::DesktopNext
                 | S::FileExplorer
                 | S::TaskManager
-                | S::Settings => {}
+                | S::Settings
+                | S::Sleep
+                | S::SignOut
+                | S::Restart
+                | S::Shutdown
+                | S::EmptyRecycleBin => {}
             }
         }
         v
@@ -441,10 +639,29 @@ mod tests {
         }
     }
 
+    /// Marcar peligrosa una accion inofensiva molesta; no marcar una destructiva
+    /// apaga el equipo de alguien. La correspondencia con la familia Energia es
+    /// exacta en los dos sentidos a proposito.
     #[test]
-    fn ninguna_accion_de_esta_fase_es_peligrosa() {
-        // Las destructivas llegan con la confirmacion doble, no antes.
-        assert!(CATALOGO.iter().all(|ficha| !ficha.peligroso));
+    fn son_peligrosas_exactamente_las_de_energia() {
+        for ficha in CATALOGO {
+            assert_eq!(
+                ficha.peligroso,
+                ficha.familia == Familia::Energia,
+                "{:?} no coincide: peligroso={} familia={:?}",
+                ficha.id,
+                ficha.peligroso,
+                ficha.familia
+            );
+        }
+        assert!(CATALOGO.iter().any(|f| f.peligroso), "ninguna peligrosa");
+    }
+
+    #[test]
+    fn toda_accion_peligrosa_explica_que_hace_antes_de_hacerlo() {
+        for ficha in CATALOGO.iter().filter(|f| f.peligroso) {
+            assert!(ficha.aviso.is_some(), "{:?} sin aviso", ficha.id);
+        }
     }
 
     #[test]

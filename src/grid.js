@@ -63,6 +63,15 @@ export const ICONOS = {
     '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m8 3.5V10H7v4h4v2.5l4.5-4.5z"/></svg>',
   monitor:
     '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 3h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-7v2h3v2H8v-2h3v-2H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1m4 11h2V8H7zm4 0h2V6h-2zm4 0h2v-4h-2z"/></svg>',
+  luna: '<svg viewBox="0 0 24 24"><path d="M21.4 13.3A9 9 0 1 1 10.7 2.6a7 7 0 0 0 10.7 10.7"/></svg>',
+  salir:
+    '<svg viewBox="0 0 24 24"><path d="M4 3h8v2H6v14h6v2H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1m10.6 4.6L13.2 9l2 2H9v2h6.2l-2 2 1.4 1.4L19.4 12z"/></svg>',
+  reiniciar:
+    '<svg viewBox="0 0 24 24"><path d="M12 5V1.5L7 6l5 4.5V7a5 5 0 1 1-4.9 6h-2A7 7 0 1 0 12 5"/></svg>',
+  apagar:
+    '<svg viewBox="0 0 24 24"><path d="M11 2h2v10h-2zm-3.4 3.3L6.2 3.9a9 9 0 1 0 11.6 0l-1.4 1.4a7 7 0 1 1-8.8 0"/></svg>',
+  papelera:
+    '<svg viewBox="0 0 24 24"><path d="M9 2h6l1 2h4v2H4V4h4zM5.5 7h13l-1 14a1 1 0 0 1-1 1H7.5a1 1 0 0 1-1-1z"/></svg>',
   ajustes:
     '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M10.1 2h3.8l.4 2.6 2 .8 2.1-1.5 2.7 2.7-1.5 2.1.8 2 2.6.4v3.8l-2.6.4-.8 2 1.5 2.1-2.7 2.7-2.1-1.5-2 .8-.4 2.6h-3.8l-.4-2.6-2-.8-2.1 1.5-2.7-2.7 1.5-2.1-.8-2L2 13.9v-3.8l2.6-.4.8-2-1.5-2.1 2.7-2.7 2.1 1.5 2-.8zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7"/></svg>',
 };
@@ -220,7 +229,7 @@ export function distribuir(botones, celdas, reservarCeldaCero) {
  * Pinta la rejilla completa.
  * @param {HTMLElement} contenedor
  * @param {import("./nav.js").Nav} nav
- * @param {{ rotas: Set<string>, urls: Record<string, string> }} ctx
+ * @param {{ rotas: Set<string>, urls: Record<string, string>, armada?: string|null }} ctx
  */
 export function render(contenedor, nav, ctx) {
   const grid = nav.deck.settings.grid;
@@ -258,6 +267,11 @@ export function render(contenedor, nav, ctx) {
     const rota = ctx.rotas.has(b.id);
     if (rota) clases.push("key--error");
 
+    // Armada: ya se pulso una vez y espera la confirmacion. Se cambia tambien la
+    // etiqueta, porque el color solo no basta para quien no lo distingue.
+    const armada = ctx.armada === b.id;
+    if (armada) clases.push("key--armada");
+
     const fondo = icon.background
       ? ` style="background:${escapar(icon.background)}"`
       : "";
@@ -265,9 +279,11 @@ export function render(contenedor, nav, ctx) {
     partes.push(
       `<button class="${clases.join(" ")}" data-boton="${escapar(b.id)}" ` +
         `data-indice="${i}"${fondo} ` +
-        `title="${escapar(b.label || "")}">` +
+        `title="${escapar(armada ? "Pulsa otra vez para confirmar" : b.label || "")}">` +
         `<span class="key-icono">${rota ? ICONOS.aviso : pintarIcono(b, ctx.urls)}</span>` +
-        `<span class="key-etiqueta">${escapar(b.label || "")}</span>` +
+        `<span class="key-etiqueta">${
+          armada ? "¿Seguro?" : escapar(b.label || "")
+        }</span>` +
         `</button>`
     );
   }

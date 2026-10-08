@@ -58,6 +58,30 @@ pub struct DeckView {
     /// id de boton -> ruta absoluta de su imagen. El frontend la convierte a URL
     /// con convertFileSrc. Solo trae los botones que tienen imagen resoluble.
     icon_paths: HashMap<String, String>,
+    /// Botones que exigen pulsar dos veces antes de ejecutarse.
+    ///
+    /// Quien decide que es peligroso es el catalogo de Rust, no el frontend: asi
+    /// una accion destructiva nueva queda protegida por el hecho de declararla,
+    /// sin que haya que acordarse de tocar tambien el JavaScript.
+    confirm_required: Vec<String>,
+}
+
+/// Botones del deck cuya accion esta marcada como peligrosa en el catalogo.
+fn botones_a_confirmar(deck: &Deck) -> Vec<String> {
+    let mut v = Vec::new();
+    for surface in deck.surfaces.values() {
+        for page in &surface.pages {
+            for button in &page.buttons {
+                if let Action::System { command } = &button.action {
+                    if sistema::info(*command).is_some_and(|f| f.peligroso) {
+                        v.push(button.id.clone());
+                    }
+                }
+            }
+        }
+    }
+    v.sort();
+    v
 }
 
 /// Resultado de pulsar una tecla. Si la accion era de carpeta, el frontend navega.
@@ -146,6 +170,7 @@ fn get_deck(state: State<AppState>) -> DeckView {
     DeckView {
         integrity: integrity::check(&deck),
         icon_paths: resolver_iconos(&deck),
+        confirm_required: botones_a_confirmar(&deck),
         deck: deck.clone(),
         warnings: state.warnings.lock().unwrap().clone(),
         config_path: state.config_path.display().to_string(),
@@ -431,6 +456,7 @@ fn guardar_y_devolver(state: &State<AppState>) -> Result<DeckView, String> {
     Ok(DeckView {
         integrity: integrity::check(&deck),
         icon_paths: resolver_iconos(&deck),
+        confirm_required: botones_a_confirmar(&deck),
         deck: deck.clone(),
         warnings: Vec::new(),
         config_path: state.config_path.display().to_string(),

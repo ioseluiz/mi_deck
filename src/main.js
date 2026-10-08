@@ -40,6 +40,25 @@ const $pie = /** @type {HTMLElement} */ (document.getElementById("pie"));
 let nav = null;
 /** Ids de botones con referencia rota, para marcarlos en la rejilla. */
 let rotas = new Set();
+
+/**
+ * Teclas que piden pulsar dos veces, y cual esta armada ahora mismo.
+ *
+ * Quien decide que es peligroso es Rust, no esta lista: aqui solo se consulta la
+ * pertenencia, igual que con `rotas`. Asi una accion destructiva nueva queda
+ * protegida por declararla en el catalogo, sin tocar este archivo.
+ */
+let aConfirmar = new Set();
+let armada = null;
+let temporizadorArmada = null;
+
+/** Desarma la tecla que estuviera esperando confirmacion. */
+function desarmar(repintar = true) {
+  if (armada === null) return;
+  armada = null;
+  clearTimeout(temporizadorArmada);
+  if (repintar) pintar();
+}
 /** Nivel de ventana vigente: "normal" | "top" | "desktop". */
 let nivelActual = "top";
 /** id de boton -> URL de su imagen, ya lista para un <img>. */
@@ -71,7 +90,7 @@ function pintar(direccion = null) {
   // ya no estan donde estaban.
   cerrarMenu();
 
-  render($grid, nav, { rotas, urls });
+  render($grid, nav, { rotas, urls, armada });
   renderMigas($migas, nav);
 
   const paginas = nav.pageCount;
@@ -182,6 +201,23 @@ function volver() {
 
 /** @param {string} botonId */
 async function pulsar(botonId) {
+  // Apagar o vaciar la papelera por un clic de mas no tiene vuelta atras. La
+  // primera pulsacion arma la tecla y la segunda ejecuta; pulsar otra cualquiera
+  // la desarma, igual que esperar tres segundos.
+  if (aConfirmar.has(botonId)) {
+    if (armada !== botonId) {
+      clearTimeout(temporizadorArmada);
+      armada = botonId;
+      pintar();
+      temporizadorArmada = setTimeout(() => desarmar(), 3000);
+      return;
+    }
+  }
+  // Siempre con repintado: desarmar por dentro y dejar la tecla roja en pantalla
+  // hace creer que sigue esperando confirmacion, que es justo lo contrario de lo
+  // que se quiere de un aviso.
+  desarmar();
+
   try {
     const salida = await invoke("run_action", { buttonId: botonId });
     // Una captura que no dice donde quedo el archivo es una captura perdida.
@@ -558,6 +594,10 @@ function conectarEdicion() {
   });
   $grid.addEventListener("pointerleave", () => {
     teclaBajoCursor = null;
+    // Si el cursor se fue de la rejilla, la confirmacion ya no viene: dejar una
+    // tecla armada esperando es pedir un accidente la proxima vez que se pase
+    // por encima.
+    desarmar();
   });
 
   // El panel se repinta cuando el editor guarda algo en su propia ventana.
@@ -580,6 +620,9 @@ function conectarEdicion() {
 function aplicarVista(vista) {
   aplicarAjustes(vista.deck.settings);
   rotas = new Set((vista.integrity?.broken ?? []).map((b) => b.button_id));
+  aConfirmar = new Set(vista.confirm_required ?? []);
+  armada = null;
+  clearTimeout(temporizadorArmada);
   // Rust entrega rutas absolutas; el webview solo puede cargarlas a traves del
   // protocolo asset:, y solo dentro del scope que Rust habilito al arrancar.
   urls = Object.fromEntries(

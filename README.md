@@ -307,6 +307,7 @@ y no hay una segunda lista en JavaScript que se pueda quedar desfasada.
 | Captura | `screenshot_region`, `screenshot_full`, `screenshot_window`, `screen_record` |
 | Multimedia y volumen | `media_play_pause`, `media_next`, `media_prev`, `volume_up`, `volume_down`, `volume_mute` |
 | Sistema | `lock`, `show_desktop`, `task_view`, `clipboard_history`, `emoji_picker`, `desktop_prev`, `desktop_next`, `file_explorer`, `task_manager`, `settings` |
+| Energía ⚠ | `sleep`, `sign_out`, `restart`, `shutdown`, `empty_recycle_bin` |
 
 Casi todas se llevan a cabo enviando una combinación, igual que `hotkey`. Dos no:
 `settings` abre `ms-settings:` por el shell, y `lock` llama a `LockWorkStation` en
@@ -317,6 +318,38 @@ un equipo gestionado eso es un riesgo real.
 graba el Explorador de archivos ni el escritorio, solo ventanas de aplicación, y si
 está deshabilitada por directiva la tecla no hará nada. El editor lo advierte en el
 propio formulario.
+
+### Acciones destructivas y doble confirmación
+
+Las de la familia **Energía** no se ejecutan al primer clic. La primera
+pulsación **arma** la tecla: se pone roja y su etiqueta pasa a «¿Seguro?». La
+segunda ejecuta. Se desarma sola a los 3 segundos, al pulsar cualquier otra tecla
+o al sacar el cursor de la rejilla.
+
+Quién decide qué es peligroso es el catálogo de Rust, no el frontend: `DeckView`
+trae `confirm_required` con los ids de botón afectados y el JavaScript solo
+consulta la pertenencia, igual que con las referencias rotas. Así una acción
+destructiva nueva queda protegida por el hecho de declararla, sin que haya que
+acordarse de tocar también el JavaScript. Un test comprueba que la
+correspondencia entre «peligrosa» y la familia Energía sea exacta **en los dos
+sentidos**: marcar peligrosa una acción inofensiva molesta, pero no marcar una
+destructiva apaga el equipo de alguien.
+
+El color no va solo: la etiqueta cambia, porque quien no distingue el rojo
+también tiene que enterarse de que esa pulsación todavía no ha hecho nada.
+
+Dos detalles de la implementación:
+
+- **Apagar y reiniciar necesitan `SeShutdownPrivilege`**, que un proceso tiene
+  concedido pero *deshabilitado* de nacimiento. Sin activarlo con
+  `AdjustTokenPrivileges`, `ExitWindowsEx` falla con «no se tienen los privilegios
+  necesarios» y la tecla parece rota sin motivo aparente.
+- **No se usa `EWX_FORCE`**, solo `EWX_FORCEIFHUNG`. Una tecla no tiene por qué
+  tirar por la borda el trabajo sin guardar de nadie: Windows pide a las
+  aplicaciones que cierren y avisa si alguna lo impide.
+
+Bloquear el equipo **no** pide confirmación: es reversible con la contraseña y
+pedir confirmación para algo inofensivo enseña a confirmar sin leer.
 
 ### Capturas de pantalla
 

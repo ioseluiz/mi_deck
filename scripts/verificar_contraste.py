@@ -32,6 +32,12 @@ EXIGENCIAS = [
     ("texto tenue sobre la barra", "--texto-tenue", "--barra", 4.5),
     ("texto tenue sobre el panel", "--texto-tenue", "--fondo", 4.5),
     ("acento sobre el panel", "--acento", "--fondo", 3.0),
+    # Tecla armada: la que espera confirmacion antes de apagar o borrar. Tiene
+    # que distinguirse de una tecla normal sin depender solo del tono, porque
+    # quien no distingue el rojo necesita verlo igual.
+    ("borde de tecla armada sobre el panel", "--armada-borde", "--fondo", 3.0),
+    ("tecla armada frente a una normal", "--armada", "--tecla", 1.2),
+    ("etiqueta sobre la tecla armada", "--texto", "--armada", 4.5),
 ]
 
 # La ventana del editor tiene colores propios, sin tokens. Se comprueban aparte
