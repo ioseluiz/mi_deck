@@ -1,0 +1,69 @@
+name: Release
+
+# Publica el instalador al empujar una etiqueta de version.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  # Util para comprobar que el workflow compila sin tener que etiquetar.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verificar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # La cache del registro y de target ahorra varios minutos por ejecucion.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Formato
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Pruebas
+        working-directory: src-tauri
+        run: cargo test
+
+  publicar:
+    needs: verificar
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # tauri-action compila, empaqueta el NSIS y crea la release con el
+      # instalador adjunto.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "MiDeck ${{ github.ref_name }}"
+          releaseBody: |
+            Instalador para Windows. Se instala en `%LOCALAPPDATA%\MiDeck`
+            sin pedir permisos de administrador.
+
+            Requiere WebView2 Runtime, presente de serie en Windows 11.
+          releaseDraft: false
+          prerelease: false

@@ -1,0 +1,15 @@
+# Compilacion. target vive fuera de OneDrive (ver .cargo/config.toml), pero se
+# ignora igualmente por si alguien clona sin esa configuracion.
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Generados
+assets/icon.png
+*.bak
+deck.local.json
+
+# Entorno local
+.env
+.vscode/
+.idea/

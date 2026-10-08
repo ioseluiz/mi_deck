@@ -1,0 +1,243 @@
+# MiDeck
+
+Widget de escritorio tipo Stream Deck para Windows. Un panel flotante de teclas que
+abren aplicaciones, sitios web, carpetas y scripts con un clic. Funciona 100 % en
+local: no usa red, no tiene cuenta y es inmune al proxy institucional.
+
+Rust + Tauri 2. El frontend son módulos ES sin bundler ni `node_modules`.
+
+## Estado
+
+**Fases 1, 2 y 3 completas** — navegación con carpetas anidadas, las cuatro
+acciones, imágenes propias por tecla, íconos extraídos de los `.exe`, bandeja del
+sistema, instancia única, persistencia de posición, y edición completa desde la
+interfaz: menú contextual, editor de teclas con vista previa en vivo, ajustes,
+reordenar arrastrando y soltar archivos desde el Explorador. Pendiente la fase 4
+(instalador NSIS y publicación).
+
+Editar `deck.json` a mano sigue siendo posible: `Ctrl+E` lo abre y `F5` lo recarga
+sin reiniciar.
+
+## Requisitos
+
+Ya presentes en el equipo de desarrollo: Rust (toolchain `stable-x86_64-pc-windows-msvc`),
+VS Build Tools con el componente C++, WebView2 Runtime y `tauri-cli`.
+
+```powershell
+cargo install tauri-cli --locked   # solo la primera vez
+```
+
+## Ejecutar
+
+```powershell
+cargo tauri dev
+```
+
+El directorio de compilación está fuera de OneDrive, en
+`C:\Users\jlmunoz\.cargo-target\31_windows_widget`, configurado en `.cargo/config.toml`.
+Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura OneDrive.
+
+## Comprobaciones
+
+```powershell
+cargo test                      # 57 pruebas: store, integridad, lanzador, imágenes, íconos, edición
+cargo clippy --all-targets -- -D warnings
+cargo fmt -- --check
+```
+
+## Atajos
+
+| Gesto | Efecto |
+|---|---|
+| Clic en una tecla | Ejecuta su acción |
+| Clic en una tecla de carpeta | Entra al sub-deck |
+| Tecla **Volver** (celda 0), `Backspace`, clic central, botón atrás del ratón | Sube un nivel |
+| Clic en una miga de pan | Salta directo a ese nivel |
+| Rueda sobre la rejilla, `Ctrl+Tab` | Cambia de página |
+| `Ctrl+E` | Abre `deck.json` en el editor predeterminado |
+| `F5` | Relee `deck.json` del disco sin reiniciar |
+| Clic derecho sobre una tecla | Editar, pegar imagen, quitar imagen, duplicar, eliminar |
+| Clic derecho sobre una celda vacía | Nueva tecla, nueva carpeta, añadir o quitar página, ajustes |
+| Clic derecho sobre las migas | Ajustes, abrir `deck.json`, recargar |
+| Arrastrar una tecla a otra celda | La mueve; si la celda está ocupada, intercambian |
+| Arrastrar una tecla sobre una carpeta | La mete dentro |
+| Soltar un `.exe`, carpeta o acceso directo | Crea una tecla en esa celda |
+| Soltar una imagen sobre una tecla | Le cambia la cara, sin tocar su acción |
+| `Ctrl+V` con el cursor sobre una tecla | Pega la imagen del portapapeles |
+| Chincheta de la barra de título | Fija o suelta "siempre encima" |
+| Arrastrar la barra de título | Mueve el panel |
+| Cerrar con la X | Oculta a la bandeja; **no** sale |
+| Clic izquierdo en el ícono de bandeja | Muestra u oculta el panel |
+| Clic derecho en el ícono de bandeja | Menú: mostrar, siempre encima, abrir `deck.json`, iniciar con Windows, salir |
+
+Cerrar no termina la aplicación: es un widget, no una ventana de documento. Para
+salir de verdad, **Salir** en el menú de la bandeja.
+
+## Configuración
+
+`%APPDATA%\MiDeck\deck.json`. Se puede redirigir con la variable de entorno
+`DECK_CONFIG`, por ejemplo a una copia en OneDrive para compartirla entre equipos.
+
+El guardado es atómico. Si el archivo se corrompe, se respalda como
+`deck.json.bak-<AAAAMMDD-HHMMSS>` y el widget arranca con un deck por defecto: el
+original nunca se pierde.
+
+### Estructura
+
+Un registro plano de *superficies* con referencias, no un árbol anidado. Una
+superficie es un nivel navegable —la raíz, o el interior de una carpeta— y un botón
+de tipo `folder` apunta a otra superficie por id.
+
+```json
+{
+  "version": 1,
+  "settings": {
+    "grid": { "cols": 5, "rows": 3 },
+    "key_size": 96,
+    "always_on_top": true,
+    "window": { "x": 1200, "y": 80 }
+  },
+  "root": "s-root",
+  "surfaces": {
+    "s-root": {
+      "name": "Mi Deck",
+      "pages": [
+        {
+          "buttons": [
+            {
+              "id": "b-outlook",
+              "position": 0,
+              "label": "Outlook",
+              "icon": { "type": "auto" },
+              "action": { "type": "app", "target": "C:\\...\\OUTLOOK.EXE", "args": "" }
+            },
+            {
+              "id": "b-proy",
+              "position": 1,
+              "label": "Proyectos",
+              "icon": { "type": "builtin", "name": "folder" },
+              "action": { "type": "folder", "surface": "s-proy" }
+            }
+          ]
+        }
+      ]
+    },
+    "s-proy": { "name": "Proyectos", "pages": [{ "buttons": [] }] }
+  }
+}
+```
+
+`position` es el índice de celda (0-14 en una rejilla 5 × 3) y admite huecos. En una
+superficie que no es la raíz, la celda 0 la ocupa la tecla **Volver**, que se inyecta
+al pintar y no se guarda en el archivo.
+
+### Tipos de acción
+
+| `type` | Qué hace | Campos |
+|---|---|---|
+| `app` | Lanza un `.exe` o `.lnk` | `target`, `args`, `workdir` |
+| `url` | Abre una dirección web | `target`, `browser` (`default`, `edge`, `chrome`, `firefox` o ruta a un `.exe`), `profile` |
+| `path` | Abre una carpeta, o revela un archivo seleccionado, en el Explorador | `target` |
+| `script` | Ejecuta un script o comando | `shell` (`powershell`/`cmd`), `target`, `args`, `hidden` |
+| `folder` | Navega a otra superficie del deck | `surface` |
+
+Cuidado con la pareja `path` y `folder`: en lenguaje coloquial ambas son "carpeta",
+pero `path` abre el Explorador de Windows y `folder` navega dentro del propio deck.
+
+En `target` y `args` se expanden las variables de Windows (`%USERPROFILE%`). Una
+variable inexistente se deja visible a propósito, para que el mensaje de error muestre
+qué falló en vez de dejar una ruta rota e inexplicable.
+
+En `script`, si `target` termina en `.ps1` se ejecuta con `-File`; si no, se trata como
+un comando suelto con `-Command`. Con `hidden: true` no aparece ninguna ventana.
+
+### Tipos de ícono
+
+| `type` | Campos | Nota |
+|---|---|---|
+| `image` | `file` | Nombre dentro de la biblioteca (ver abajo). |
+| `auto` | — | Extrae el ícono de shell del destino. Para una acción `url` dibuja una pastilla con la inicial del dominio. |
+| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file` | |
+| `emoji` | `char` | |
+
+Comunes a todos:
+
+| Campo | Valores | Efecto |
+|---|---|---|
+| `fit` | `contain` (por defecto) · `cover` | `contain`: imagen centrada con la etiqueta debajo. `cover`: imagen a sangre cubriendo toda la cara de la tecla. |
+| `label_style` | `below` · `overlay` · `none` | `overlay` pone la etiqueta sobre la imagen con un degradado al pie, para que se lea sobre cualquier foto. |
+| `background` | HEX | Color de fondo de la tecla. |
+
+### Biblioteca de imágenes
+
+Las imágenes no se referencian por ruta absoluta: se importan a
+`%APPDATA%\MiDeck\icons\` y se nombran por el hash de su contenido. Así importar
+la misma imagen dos veces no la duplica, mover o borrar el archivo original no
+rompe la tecla, y `deck.json` + la carpeta `icons\` son un paquete autocontenido
+que se puede copiar a otro equipo.
+
+Al importar se reescala al lado mayor de 256 px manteniendo la proporción, sin
+recortar: el ajuste final lo hace `fit` en el CSS, de modo que cambiar de
+`contain` a `cover` no obliga a reimportar. Los SVG se copian sin rasterizar. El
+original se conserva en `icons\original\`.
+
+Mientras no exista el arrastrar y soltar de la fase 3:
+
+```powershell
+cargo run --example importar_imagen -- "C:\ruta\logo.png"
+```
+
+Imprime el nombre que hay que poner en `"icon": { "type": "image", "file": "..." }`.
+
+Al borrar un botón su imagen **no** se borra. Limpiarlas será una acción explícita
+desde Ajustes (fase 3): un borrado automático convertiría un error de edición en
+una pérdida de trabajo.
+
+### Íconos automáticos
+
+`"type": "auto"` extrae el ícono real de Windows con
+`SHGetFileInfoW` + `SHGetImageList(SHIL_JUMBO)`, que da hasta 256 px y resuelve el
+destino de los `.lnk`. Se descartó el crate `systemicons` justamente por lo
+contrario: usa `ExtractIconExW`, tope 32 × 32 y sin resolver accesos directos.
+
+El resultado se cachea en `%LOCALAPPDATA%\MiDeck\cache\icons\`, con clave de
+ruta + fecha de modificación, así que actualizar una app refresca su ícono solo.
+La caché se puede borrar sin consecuencias.
+
+Para las URLs **no se descargan favicons**: se dibuja una pastilla con la inicial
+del dominio sobre un color derivado del propio dominio. El widget no toca la red
+jamás, lo que lo hace inmune al proxy institucional y a trabajar sin conexión. Si
+quieres el logo real, impórtalo como imagen.
+
+## Seguridad
+
+`deck.json` es texto plano y las acciones de tipo `script` ejecutan lo que contengan
+con los permisos del usuario. **No guardes credenciales ni tokens ahí.** Si un script
+los necesita, que los lea de una variable de entorno o del Administrador de
+credenciales de Windows.
+
+## Estructura del proyecto
+
+```
+src/                    frontend: módulos ES, sin build
+  index.html  styles.css
+  api.js                envoltura de window.__TAURI__
+  nav.js                pila de navegación y migas
+  grid.js               pintado de la rejilla
+  main.js               arranque y eventos
+  menu.js               menú contextual
+  dnd.js                arrastrar y soltar, y reordenar
+  editor.html/.css/.js  ventana del editor y de ajustes
+src-tauri/src/
+  model.rs              structs serde del deck
+  edit.rs               mutaciones puras: crear, mover, duplicar, borrar
+  store.rs              deck.json: carga, guardado atómico, respaldo
+  integrity.rs          referencias rotas, ciclos, superficies huérfanas
+  launcher.rs           build_launch() puro + execute()
+  icons.rs              ícono de shell vía API de Windows, con caché
+  images.rs             biblioteca de imágenes: importar, normalizar, limpiar
+  lib.rs                comandos Tauri, bandeja y arranque de la ventana
+src-tauri/examples/
+  importar_imagen.rs    importa una imagen desde la línea de comandos
+scripts/generar_icono.py  regenera assets/icon.png (luego: cargo tauri icon)
+```

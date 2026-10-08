@@ -1,0 +1,532 @@
+/* MiDeck - tema oscuro tipo Stream Deck.
+   Los tokens de rejilla (--cols, --rows, --key) los inyecta main.js desde los
+   ajustes del deck, para que cambiar la rejilla no exija tocar el CSS. */
+
+:root {
+  --fondo: #1a1c1f;
+  --tecla: #26292e;
+  --tecla-hover: #32363c;
+  --tecla-activa: #1f2227;
+  --acento: #4c8dff;
+  --texto: #e8eaed;
+  --texto-tenue: #9aa0a6;
+  --error: #f0616d;
+  --borde: #000000;
+
+  --cols: 5;
+  --rows: 3;
+  --key: 96px;
+  --hueco: 10px;
+  --radio-tecla: 10px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  /* La ventana es transparente: el fondo lo pinta #panel, que tiene su propio
+     radio de esquina. Si el body pintara, se verian esquinas cuadradas. */
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  color: var(--texto);
+  user-select: none;
+  cursor: default;
+}
+
+#panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin: 8px;
+  background: var(--fondo);
+  border: 1px solid #0d0e10;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------- barra de titulo */
+
+#titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  background: #15171a;
+  border-bottom: 1px solid #0d0e10;
+  flex: 0 0 auto;
+}
+
+#breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--texto-tenue);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.crumb {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.crumb:hover {
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.crumb--actual {
+  color: var(--texto);
+  font-weight: 600;
+  cursor: default;
+}
+
+.crumb--actual:hover {
+  background: none;
+}
+
+.crumb-sep {
+  color: #5f6368;
+}
+
+#window-actions {
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.win-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: var(--texto-tenue);
+  cursor: pointer;
+}
+
+.win-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.win-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--texto);
+}
+
+.win-btn[aria-pressed="true"] {
+  color: var(--acento);
+}
+
+.win-btn--close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+/* -------------------------------------------------------------------- rejilla */
+
+#grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--key));
+  grid-template-rows: repeat(var(--rows), var(--key));
+  gap: var(--hueco);
+  padding: 12px;
+  justify-content: center;
+  align-content: center;
+}
+
+/* Transicion lateral al entrar o salir de una carpeta: es lo que hace que la
+   navegacion se sienta como un Stream Deck y no como cambiar de pestana. */
+@keyframes entrar-desde-derecha {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+@keyframes entrar-desde-izquierda {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+#grid.anim-adelante {
+  animation: entrar-desde-derecha 120ms ease-out;
+}
+
+#grid.anim-atras {
+  animation: entrar-desde-izquierda 120ms ease-out;
+}
+
+/* ---------------------------------------------------------------------- tecla */
+
+.key {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 5px;
+  background: var(--tecla);
+  border: 1px solid #16181b;
+  border-radius: var(--radio-tecla);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 110ms ease, transform 70ms ease;
+}
+
+.key:hover {
+  background: var(--tecla-hover);
+}
+
+.key:active {
+  background: var(--tecla-activa);
+  transform: scale(0.96);
+}
+
+.key:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+.key--vacia {
+  background: rgba(255, 255, 255, 0.022);
+  border: 1px dashed #2c3036;
+  cursor: default;
+}
+
+.key--vacia:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.key--error {
+  border-color: var(--error);
+  box-shadow: inset 0 0 0 1px var(--error);
+}
+
+/* Las teclas de carpeta llevan esquina doblada para distinguirse de un vistazo
+   de las que lanzan algo. */
+.key--carpeta::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-width: 0 13px 13px 0;
+  border-style: solid;
+  border-color: transparent #3c4149 transparent transparent;
+}
+
+.key--volver {
+  background: #20242a;
+}
+
+.key-icono {
+  display: grid;
+  place-items: center;
+  width: 54%;
+  height: 54%;
+  font-size: calc(var(--key) * 0.36);
+  line-height: 1;
+}
+
+.key-icono img,
+.key-icono svg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Sin esto los SVG heredan fill negro y desaparecen sobre la tecla oscura. */
+.key-icono svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--texto);
+}
+
+.key--vacia .key-icono svg,
+.key--volver .key-icono svg {
+  fill: var(--texto-tenue);
+}
+
+/* Pastilla con la inicial del dominio, para las URLs. Sustituye al favicon, que
+   exigiria red: el widget no debe depender del proxy ni de estar conectado. */
+.pastilla {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 22%;
+  color: #fff;
+  font-size: calc(var(--key) * 0.3);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.key--cover .key-icono .pastilla {
+  border-radius: 0;
+}
+
+.key-etiqueta {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--texto);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* fit: cover -- imagen a sangre cubriendo toda la cara de la tecla. */
+.key--cover .key-icono {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.key--cover .key-icono img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+}
+
+/* label_style: overlay -- degradado al pie para que la etiqueta se lea sobre
+   cualquier foto, por clara que sea. */
+.key--label-overlay .key-etiqueta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 5px 5px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82), transparent);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.key--label-none .key-etiqueta {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ paginador */
+
+#pager[hidden],
+#toast[hidden] {
+  display: none;
+}
+
+#pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 5px 0 9px;
+  font-size: 11px;
+  color: var(--texto-tenue);
+  flex: 0 0 auto;
+}
+
+.pager-btn {
+  background: none;
+  border: 0;
+  color: var(--texto-tenue);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--texto);
+}
+
+.pager-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------- pie */
+
+#pie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 8px;
+  flex: 0 0 auto;
+}
+
+.repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: #6f757c;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 110ms ease, background 110ms ease;
+}
+
+.repo svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+.repo:hover {
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* ---------------------------------------------------------------------- aviso */
+
+#toast {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  padding: 9px 12px;
+  background: #2a1d1f;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #ffd9dc;
+  overflow-wrap: anywhere;
+  animation: aparecer 140ms ease-out;
+}
+
+#toast.toast--info {
+  background: #1b2430;
+  border-color: #35557f;
+  color: #cfe0f5;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* ------------------------------------------------------------ menu contextual */
+
+#ctxmenu {
+  position: fixed;
+  z-index: 50;
+  min-width: 182px;
+  padding: 4px;
+  background: #24282e;
+  border: 1px solid #383d44;
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
+}
+
+#ctxmenu[hidden] {
+  display: none;
+}
+
+.ctx-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: var(--texto);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: var(--acento);
+  color: #0b1b36;
+}
+
+.ctx-item:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.ctx-item--peligro:hover:not(:disabled) {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: #383d44;
+}
+
+/* ------------------------------------------------------------------ arrastre */
+
+/* Cada destino de soltado tiene su propio color: el resultado de soltar nunca
+   debe ser una sorpresa. Azul crea, verde cambia la imagen, ambar mete dentro. */
+.drop-aqui {
+  outline: 2px solid var(--acento);
+  outline-offset: -1px;
+  background: rgba(76, 141, 255, 0.16) !important;
+}
+
+.drop-imagen {
+  outline: 2px solid #3fb950;
+  outline-offset: -1px;
+  background: rgba(63, 185, 80, 0.16) !important;
+}
+
+.drop-dentro {
+  outline: 2px solid #d9a441;
+  outline-offset: -1px;
+  background: rgba(217, 164, 65, 0.16) !important;
+}
+
+.key--arrastrando {
+  opacity: 0.3;
+}
+
+/* El fantasma sigue al cursor. Sin pointer-events, elementFromPoint devolveria
+   siempre el propio fantasma y nunca la celda de debajo. */
+.key--fantasma {
+  position: fixed;
+  z-index: 60;
+  width: var(--key);
+  height: var(--key);
+  margin: calc(var(--key) / -2) 0 0 calc(var(--key) / -2);
+  pointer-events: none;
+  opacity: 0.85;
+  transform: scale(0.9);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
+}

@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MiDeck — editor</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="editor.css" />
+  </head>
+  <body class="editor">
+    <!-- ------------------------------------------------ editor de una tecla -->
+    <main id="vista-tecla" hidden>
+      <div class="cols">
+        <section class="campos">
+          <label class="campo">
+            <span>Etiqueta</span>
+            <input id="ed-label" type="text" maxlength="40" autocomplete="off" />
+          </label>
+
+          <label class="campo">
+            <span>Acción</span>
+            <select id="ed-tipo">
+              <option value="app">Abrir una aplicación</option>
+              <option value="url">Abrir un sitio web</option>
+              <option value="path">Abrir una carpeta o archivo</option>
+              <option value="script">Ejecutar un script o comando</option>
+              <option value="folder">Entrar a una carpeta del deck</option>
+            </select>
+          </label>
+
+          <div class="grupo" data-tipo="app">
+            <label class="campo">
+              <span>Ejecutable o acceso directo</span>
+              <span class="fila">
+                <input id="ed-app-target" type="text" placeholder="notepad.exe o C:\…\app.exe" />
+                <button type="button" data-examinar="ed-app-target" data-filtro="exe">Examinar…</button>
+              </span>
+            </label>
+            <label class="campo">
+              <span>Argumentos</span>
+              <input id="ed-app-args" type="text" placeholder='--flag "con espacios"' />
+            </label>
+            <label class="campo">
+              <span>Carpeta de trabajo</span>
+              <input id="ed-app-workdir" type="text" />
+            </label>
+            <label class="check">
+              <input id="ed-app-focus" type="checkbox" />
+              <span>Traer al frente si ya está abierta, en vez de abrir otra</span>
+            </label>
+          </div>
+
+          <div class="grupo" data-tipo="url" hidden>
+            <label class="campo">
+              <span>Dirección</span>
+              <input id="ed-url-target" type="text" placeholder="https://…" />
+            </label>
+            <label class="campo">
+              <span>Navegador</span>
+              <select id="ed-url-browser">
+                <option value="default">El predeterminado</option>
+                <option value="edge">Microsoft Edge</option>
+                <option value="chrome">Chrome</option>
+                <option value="firefox">Firefox</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span>Perfil <small>(solo Edge y Chrome)</small></span>
+              <input id="ed-url-profile" type="text" placeholder="Default, Profile 1…" />
+            </label>
+          </div>
+
+          <div class="grupo" data-tipo="path" hidden>
+            <label class="campo">
+              <span>Carpeta o archivo</span>
+              <span class="fila">
+                <input id="ed-path-target" type="text" placeholder="%USERPROFILE%\Documentos" />
+                <button type="button" data-examinar="ed-path-target" data-filtro="dir">Carpeta…</button>
+                <button type="button" data-examinar="ed-path-target" data-filtro="any">Archivo…</button>
+              </span>
+            </label>
+            <p class="nota">Una carpeta se abre en el Explorador. Un archivo se abre con el Explorador y queda seleccionado.</p>
+          </div>
+
+          <div class="grupo" data-tipo="script" hidden>
+            <label class="campo">
+              <span>Intérprete</span>
+              <select id="ed-script-shell">
+                <option value="powershell">PowerShell</option>
+                <option value="cmd">CMD</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span>Script o comando</span>
+              <span class="fila">
+                <input id="ed-script-target" type="text" placeholder="C:\…\tarea.ps1  o  Get-Date" />
+                <button type="button" data-examinar="ed-script-target" data-filtro="script">Examinar…</button>
+              </span>
+            </label>
+            <label class="campo">
+              <span>Argumentos</span>
+              <input id="ed-script-args" type="text" />
+            </label>
+            <label class="check">
+              <input id="ed-script-hidden" type="checkbox" />
+              <span>Sin ventana</span>
+            </label>
+            <p class="nota aviso">
+              Lo que pongas aquí se ejecuta con tus permisos. No guardes contraseñas
+              ni tokens en este archivo.
+            </p>
+          </div>
+
+          <div class="grupo" data-tipo="folder" hidden>
+            <label class="campo">
+              <span>Carpeta destino</span>
+              <select id="ed-folder-surface"></select>
+            </label>
+            <p class="nota">
+              Esta tecla no lanza nada: entra a otro nivel del deck. Para crear una
+              carpeta nueva, usa el menú del clic derecho sobre una celda vacía.
+            </p>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- cara de la tecla -->
+        <section class="aspecto">
+          <h2>Cara de la tecla</h2>
+          <div class="previa">
+            <div id="ed-preview" class="key"></div>
+          </div>
+
+          <div class="fila fila--envolver">
+            <button type="button" id="ed-img-elegir">Elegir imagen…</button>
+            <button type="button" id="ed-img-pegar">Pegar</button>
+            <button type="button" id="ed-img-quitar">Quitar</button>
+          </div>
+
+          <label class="campo">
+            <span>Emoji</span>
+            <input id="ed-emoji" type="text" maxlength="4" placeholder="💾" />
+          </label>
+
+          <label class="campo">
+            <span>Ajuste de la imagen</span>
+            <select id="ed-fit">
+              <option value="contain">Ícono centrado</option>
+              <option value="cover">A sangre</option>
+            </select>
+          </label>
+
+          <label class="campo">
+            <span>Etiqueta</span>
+            <select id="ed-labelstyle">
+              <option value="below">Debajo de la imagen</option>
+              <option value="overlay">Sobre la imagen</option>
+              <option value="none">Sin etiqueta</option>
+            </select>
+          </label>
+
+          <label class="campo">
+            <span>Color de fondo</span>
+            <span class="fila">
+              <input id="ed-bg" type="color" value="#26292e" />
+              <button type="button" id="ed-bg-quitar">Sin color</button>
+            </span>
+          </label>
+        </section>
+      </div>
+    </main>
+
+    <!-- ------------------------------------------------------- ajustes ----- -->
+    <main id="vista-ajustes" hidden>
+      <section class="campos">
+        <h2>Rejilla</h2>
+        <div class="fila">
+          <label class="campo campo--corto">
+            <span>Columnas</span>
+            <input id="aj-cols" type="number" min="1" max="12" />
+          </label>
+          <label class="campo campo--corto">
+            <span>Filas</span>
+            <input id="aj-rows" type="number" min="1" max="8" />
+          </label>
+          <label class="campo campo--corto">
+            <span>Tamaño de tecla</span>
+            <input id="aj-key" type="number" min="48" max="200" step="4" />
+          </label>
+        </div>
+        <p class="nota">
+          Al reducir la rejilla, las teclas que queden fuera de rango no se borran:
+          siguen en <code>deck.json</code> y reaparecen si vuelves a ampliarla.
+        </p>
+
+        <h2>Ventana</h2>
+        <label class="check">
+          <input id="aj-ontop" type="checkbox" />
+          <span>Siempre encima</span>
+        </label>
+        <label class="check">
+          <input id="aj-autostart" type="checkbox" />
+          <span>Iniciar con Windows</span>
+        </label>
+        <label class="check">
+          <input id="aj-minimized" type="checkbox" />
+          <span>Arrancar oculto en la bandeja</span>
+        </label>
+
+        <h2>Mantenimiento</h2>
+        <div id="aj-huerfanas" class="nota"></div>
+        <div class="fila fila--envolver">
+          <button type="button" id="aj-purgar">Borrar carpetas sin usar…</button>
+          <button type="button" id="aj-limpiar-img">Limpiar imágenes sin usar…</button>
+        </div>
+        <div id="aj-imagenes" class="nota"></div>
+        <div class="fila fila--envolver">
+          <button type="button" id="aj-abrir-json">Abrir deck.json</button>
+        </div>
+      </section>
+    </main>
+
+    <footer id="acciones">
+      <span id="ed-error" class="error" hidden></span>
+      <span class="espaciador"></span>
+      <button type="button" id="ed-cancelar">Cancelar</button>
+      <button type="button" id="ed-guardar" class="primario">Guardar</button>
+    </footer>
+
+
+    <script type="module" src="editor.js"></script>
+  </body>
+</html>

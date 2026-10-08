@@ -1,0 +1,58 @@
+[package]
+name = "mideck"
+version = "0.1.0"
+description = "Widget de escritorio tipo Stream Deck"
+authors = ["jlmunoz"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "mideck"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mideck"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Biblioteca de imagenes: decodificar, reescalar y volver a codificar a PNG.
+image = "0.25"
+# Nombra imagenes e iconos por hash de contenido, para no duplicar archivos.
+sha2 = "0.10"
+
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-single-instance = "2"
+
+# Iconos de shell: se descarto el crate systemicons porque usa ExtractIconExW, que
+# tope da 32x32 (borroso en una tecla de 96 px) y no resuelve el destino de un .lnk.
+# SHGetImageList con SHIL_JUMBO da 256 px y respeta los accesos directos.
+[target."cfg(windows)".dependencies.windows]
+version = "0.58"
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Threading",
+  "Win32_UI_Controls",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

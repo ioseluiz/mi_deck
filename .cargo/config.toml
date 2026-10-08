@@ -1,0 +1,4 @@
+# El directorio de compilacion vive FUERA de OneDrive: cargo genera miles de
+# archivos pequenos (2-4 GB) y sincronizarlos satura el cliente de OneDrive.
+[build]
+target-dir = "C:/Users/jlmunoz/.cargo-target/31_windows_widget"
