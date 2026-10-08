@@ -252,7 +252,10 @@ async function cargarAjustes(vista) {
   $("aj-cols").value = settings.grid.cols;
   $("aj-rows").value = settings.grid.rows;
   $("aj-key").value = settings.key_size;
-  $("aj-ontop").checked = settings.always_on_top;
+  $("aj-nivel").value = settings.window_level ?? "top";
+  $("aj-hotkey").value = settings.hotkey ?? "";
+  $("aj-lock").checked = Boolean(settings.lock_position);
+  explicarNivel();
   $("aj-minimized").checked = settings.start_minimized;
   autostartInicial = Boolean(settings.start_with_windows);
   $("aj-autostart").checked = autostartInicial;
@@ -274,6 +277,19 @@ async function refrescarImagenesSinUso() {
   return sueltas;
 }
 
+/** Explica en una linea que implica el nivel elegido. */
+function explicarNivel() {
+  const nota = $("aj-nivel-nota");
+  if (!nota) return;
+  nota.textContent = {
+    top: "Siempre visible, pero tapa lo que tengas debajo.",
+    normal: "Se comporta como cualquier ventana: va y viene del frente.",
+    desktop:
+      "Vive sobre el fondo de pantalla, por debajo de todo. No estorba nunca; " +
+      "lo ves con Win+D o lo traes al frente con el atajo global.",
+  }[$("aj-nivel").value] ?? "";
+}
+
 async function guardarAjustes() {
   const nuevos = {
     ...settings,
@@ -282,7 +298,9 @@ async function guardarAjustes() {
       rows: Math.max(1, Number($("aj-rows").value) || 3),
     },
     key_size: Math.max(48, Number($("aj-key").value) || 96),
-    always_on_top: $("aj-ontop").checked,
+    window_level: $("aj-nivel").value,
+    lock_position: $("aj-lock").checked,
+    hotkey: $("aj-hotkey").value.trim() || null,
     start_minimized: $("aj-minimized").checked,
   };
   await invoke("update_settings", { settings: nuevos });
@@ -421,6 +439,8 @@ function conectar() {
       error(String(e));
     }
   });
+
+  $("aj-nivel")?.addEventListener("change", explicarNivel);
 
   $("aj-abrir-json")?.addEventListener("click", () =>
     invoke("open_config_file").catch((e) => error(String(e)))

@@ -29,11 +29,15 @@ const $min = /** @type {HTMLButtonElement} */ (document.getElementById("btn-min"
 const $close = /** @type {HTMLButtonElement} */ (document.getElementById("btn-close"));
 const $toast = /** @type {HTMLElement} */ (document.getElementById("toast"));
 const $repo = /** @type {HTMLButtonElement} */ (document.getElementById("btn-repo"));
+const $lock = /** @type {HTMLButtonElement} */ (document.getElementById("btn-lock"));
+const $titlebar = /** @type {HTMLElement} */ (document.getElementById("titlebar"));
 
 /** @type {Nav | null} */
 let nav = null;
 /** Ids de botones con referencia rota, para marcarlos en la rejilla. */
 let rotas = new Set();
+/** Nivel de ventana vigente: "normal" | "top" | "desktop". */
+let nivelActual = "top";
 /** id de boton -> URL de su imagen, ya lista para un <img>. */
 let urls = {};
 let temporizadorToast = 0;
@@ -86,7 +90,24 @@ function aplicarAjustes(settings) {
   raiz.style.setProperty("--cols", String(settings.grid.cols));
   raiz.style.setProperty("--rows", String(settings.grid.rows));
   raiz.style.setProperty("--key", `${settings.key_size}px`);
-  $pin.setAttribute("aria-pressed", String(Boolean(settings.always_on_top)));
+
+  nivelActual = settings.window_level ?? "top";
+  $pin.setAttribute("aria-pressed", String(nivelActual === "top"));
+  $pin.title =
+    nivelActual === "top"
+      ? "Siempre encima (clic para pasar a nivel escritorio)"
+      : nivelActual === "desktop"
+        ? "Al nivel del escritorio (clic para ponerlo encima)"
+        : "Ventana normal (clic para ponerlo encima)";
+  $pin.classList.toggle("win-btn--escritorio", nivelActual === "desktop");
+
+  const bloqueada = Boolean(settings.lock_position);
+  $lock.setAttribute("aria-pressed", String(bloqueada));
+  $lock.title = bloqueada ? "Posición bloqueada" : "Bloquear la posición";
+  // Quitar el atributo es lo que desactiva el arrastre: Tauri solo mueve la
+  // ventana desde elementos que lo llevan.
+  if (bloqueada) $titlebar.removeAttribute("data-tauri-drag-region");
+  else $titlebar.setAttribute("data-tauri-drag-region", "");
 }
 
 // ----------------------------------------------------------------- navegacion
@@ -196,11 +217,29 @@ function conectarEventos() {
     }
   });
 
+  // El pin alterna entre los dos niveles utiles. "Ventana normal" se elige en
+  // Ajustes: es el caso raro y no merece un tercer estado en un boton de 30 px.
   $pin.addEventListener("click", async () => {
-    const fijado = $pin.getAttribute("aria-pressed") === "true";
+    const siguiente = nivelActual === "top" ? "desktop" : "top";
     try {
-      await invoke("set_always_on_top", { value: !fijado });
-      $pin.setAttribute("aria-pressed", String(!fijado));
+      await invoke("set_window_level", { level: siguiente });
+      await refrescar();
+      aviso(
+        siguiente === "desktop"
+          ? "Al nivel del escritorio: ya no tapa tus ventanas. Tráelo con el atajo global."
+          : "Siempre encima de todo.",
+        "info"
+      );
+    } catch (err) {
+      aviso(String(err));
+    }
+  });
+
+  $lock.addEventListener("click", async () => {
+    const bloqueada = $lock.getAttribute("aria-pressed") === "true";
+    try {
+      await invoke("set_lock_position", { value: !bloqueada });
+      await refrescar();
     } catch (err) {
       aviso(String(err));
     }

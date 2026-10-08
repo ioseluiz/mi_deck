@@ -193,9 +193,26 @@
         </p>
 
         <h2>Ventana</h2>
+        <label class="campo">
+          <span>Dónde vive el panel</span>
+          <select id="aj-nivel">
+            <option value="top">Siempre encima de todo</option>
+            <option value="normal">Ventana normal</option>
+            <option value="desktop">Al nivel del escritorio</option>
+          </select>
+        </label>
+        <p class="nota" id="aj-nivel-nota"></p>
+        <label class="campo">
+          <span>Atajo global <small>(lo trae al frente desde donde estés)</small></span>
+          <input id="aj-hotkey" type="text" placeholder="Ctrl+Alt+Space" />
+        </label>
+        <p class="nota">
+          Deja el atajo en blanco para desactivarlo. Si la combinación ya la usa
+          otra aplicación, se ignora en silencio.
+        </p>
         <label class="check">
-          <input id="aj-ontop" type="checkbox" />
-          <span>Siempre encima</span>
+          <input id="aj-lock" type="checkbox" />
+          <span>Bloquear la posición, para no moverlo sin querer</span>
         </label>
         <label class="check">
           <input id="aj-autostart" type="checkbox" />

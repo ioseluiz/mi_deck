@@ -11,6 +11,7 @@ pub mod images;
 pub mod integrity;
 pub mod launcher;
 pub mod model;
+pub mod nivel;
 pub mod screen;
 pub mod store;
 
@@ -26,7 +27,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::ManagerExt;
 
-use model::{Action, Deck, IconSource, WindowPos};
+use model::{Action, Deck, IconSource, WindowLevel, WindowPos};
 
 pub struct AppState {
     pub deck: Mutex<Deck>,
@@ -230,19 +231,29 @@ fn save_window_pos(
     store::save(&deck, &state.config_path).map_err(|e| e.to_string())
 }
 
+/// Cambia donde vive el panel: normal, encima de todo, o al nivel del escritorio.
 #[tauri::command]
-fn set_always_on_top(
-    value: bool,
-    window: tauri::Window,
+fn set_window_level(
+    level: WindowLevel,
     app: AppHandle,
     state: State<AppState>,
 ) -> Result<(), String> {
-    window.set_always_on_top(value).map_err(|e| e.to_string())?;
+    if let Some(w) = app.get_webview_window("main") {
+        nivel::aplicar(&w, level);
+    }
     if let Some(items) = app.try_state::<TrayItems>() {
-        let _ = items.pin.set_checked(value);
+        let _ = items.pin.set_checked(level == WindowLevel::Top);
     }
     let mut deck = state.deck.lock().unwrap();
-    deck.settings.always_on_top = value;
+    deck.settings.window_level = level;
+    store::save(&deck, &state.config_path).map_err(|e| e.to_string())
+}
+
+/// Candado de posicion: con el puesto, la barra de titulo no arrastra la ventana.
+#[tauri::command]
+fn set_lock_position(value: bool, state: State<AppState>) -> Result<(), String> {
+    let mut deck = state.deck.lock().unwrap();
+    deck.settings.lock_position = value;
     store::save(&deck, &state.config_path).map_err(|e| e.to_string())
 }
 
@@ -777,7 +788,7 @@ fn guardar_posicion(window: &tauri::Window) {
 
 // --------------------------------------------------------------------- bandeja
 
-fn construir_bandeja(app: &AppHandle, always_on_top: bool) -> tauri::Result<()> {
+fn construir_bandeja(app: &AppHandle, nivel_actual: WindowLevel) -> tauri::Result<()> {
     let autostart_activo = app.autolaunch().is_enabled().unwrap_or(false);
 
     let mostrar = MenuItem::with_id(app, "mostrar", "Mostrar u ocultar", true, None::<&str>)?;
@@ -786,7 +797,7 @@ fn construir_bandeja(app: &AppHandle, always_on_top: bool) -> tauri::Result<()> 
         "pin",
         "Siempre encima",
         true,
-        always_on_top,
+        nivel_actual == WindowLevel::Top,
         None::<&str>,
     )?;
     let config = MenuItem::with_id(app, "config", "Abrir deck.json", true, None::<&str>)?;
@@ -837,13 +848,20 @@ fn construir_bandeja(app: &AppHandle, always_on_top: bool) -> tauri::Result<()> 
                 }
                 "pin" => {
                     let items = app.state::<TrayItems>();
-                    let nuevo = items.pin.is_checked().unwrap_or(false);
+                    let marcado = items.pin.is_checked().unwrap_or(false);
+                    // Desde la bandeja solo se alterna entre encima y normal. El
+                    // nivel escritorio se elige en Ajustes, donde cabe explicarlo.
+                    let nuevo = if marcado {
+                        WindowLevel::Top
+                    } else {
+                        WindowLevel::Normal
+                    };
                     if let Some(w) = ventana {
-                        let _ = w.set_always_on_top(nuevo);
+                        nivel::aplicar(&w, nuevo);
                     }
                     let state = app.state::<AppState>();
                     let mut deck = state.deck.lock().unwrap();
-                    deck.settings.always_on_top = nuevo;
+                    deck.settings.window_level = nuevo;
                     let _ = store::save(&deck, &state.config_path);
                 }
                 "config" => {
@@ -886,6 +904,50 @@ fn construir_bandeja(app: &AppHandle, always_on_top: bool) -> tauri::Result<()> 
     Ok(())
 }
 
+/// Registra el atajo global que trae el panel al frente.
+///
+/// Se ignora en silencio si la combinacion ya la tiene otra aplicacion: es un
+/// extra, no una razon para que el widget no arranque.
+fn registrar_atajo(app: &AppHandle, combinacion: Option<&str>) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    let Some(combinacion) = combinacion.filter(|c| !c.trim().is_empty()) else {
+        return;
+    };
+    let atajos = app.global_shortcut();
+    let _ = atajos.unregister_all();
+
+    let manejador = app.clone();
+    let r = atajos.on_shortcut(combinacion, move |_app, _sc, evento| {
+        if evento.state() != ShortcutState::Pressed {
+            return;
+        }
+        if let Some(w) = manejador.get_webview_window("main") {
+            let visible = w.is_visible().unwrap_or(false);
+            let enfocada = w.is_focused().unwrap_or(false);
+            if !(visible && enfocada) {
+                nivel::al_frente(&w);
+                return;
+            }
+            // Segunda pulsacion con el panel ya delante: quitarlo de en medio.
+            // En nivel escritorio se devuelve al fondo en vez de ocultarlo, porque
+            // ahi su gracia es seguir estando en su sitio cuando miras el
+            // escritorio; ocultarlo seria romper justo eso.
+            let state = manejador.state::<AppState>();
+            let nivel_actual = state.deck.lock().unwrap().settings.window_level;
+            nivel::marcar_al_frente(false);
+            if nivel_actual == WindowLevel::Desktop {
+                nivel::al_fondo(&w);
+            } else {
+                let _ = w.hide();
+            }
+        }
+    });
+    if r.is_err() {
+        eprintln!("[MiDeck] no se pudo registrar el atajo {combinacion}");
+    }
+}
+
 // -------------------------------------------------------------------- arranque
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -899,7 +961,8 @@ pub fn run() {
         let _ = store::save(&cargado.deck, &config_path);
     }
 
-    let always_on_top = cargado.deck.settings.always_on_top;
+    let nivel_inicial = cargado.deck.settings.window_level;
+    let atajo = cargado.deck.settings.hotkey.clone();
     let start_minimized = cargado.deck.settings.start_minimized;
     let posicion = cargado.deck.settings.window;
 
@@ -924,6 +987,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
@@ -937,7 +1001,8 @@ pub fn run() {
             reload_deck,
             run_action,
             save_window_pos,
-            set_always_on_top,
+            set_window_level,
+            set_lock_position,
             set_autostart,
             open_config_file,
             open_repo,
@@ -974,7 +1039,7 @@ pub fn run() {
             let _ = scope.allow_directory(images::library_dir(), true);
             let _ = scope.allow_directory(icons::cache_dir(), true);
 
-            construir_bandeja(app.handle(), always_on_top)?;
+            construir_bandeja(app.handle(), nivel_inicial)?;
 
             let window = app.get_webview_window("main").expect("ventana principal");
 
@@ -990,7 +1055,8 @@ pub fn run() {
             if let Some(WindowPos { x, y }) = segura {
                 let _ = window.set_position(PhysicalPosition::new(x, y));
             }
-            let _ = window.set_always_on_top(always_on_top);
+            nivel::aplicar(&window, nivel_inicial);
+            registrar_atajo(app.handle(), atajo.as_deref());
 
             if !start_minimized {
                 let _ = window.show();
@@ -1000,6 +1066,25 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // En nivel escritorio hay que reimponer el fondo del orden z: Windows
+            // no tiene una bandera "siempre debajo" que lo mantenga solo.
+            if let WindowEvent::Focused(enfocada) = event {
+                if window.label() == "main" {
+                    let state = window.state::<AppState>();
+                    let nivel_actual = state.deck.lock().unwrap().settings.window_level;
+                    let reaccion =
+                        nivel::al_cambiar_foco(nivel_actual, *enfocada, nivel::esta_al_frente());
+                    if reaccion == nivel::Reaccion::Empujar {
+                        if !*enfocada {
+                            nivel::marcar_al_frente(false);
+                        }
+                        if let Some(w) = window.get_webview_window("main") {
+                            nivel::al_fondo(&w);
+                        }
+                    }
+                }
+            }
+
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // Solo el panel se oculta a la bandeja: es un widget, no una
                 // ventana de documento. El editor se cierra de verdad, o quedaria

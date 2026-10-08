@@ -136,6 +136,12 @@ body {
   color: var(--acento);
 }
 
+/* Nivel escritorio: distinto del azul de "siempre encima", para que el estado se
+   lea de un vistazo sin pasar el raton por encima. */
+.win-btn--escritorio {
+  color: #d9a441;
+}
+
 .win-btn--close:hover {
   background: #c42b1c;
   color: #fff;

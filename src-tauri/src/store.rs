@@ -46,11 +46,14 @@ pub fn load(path: &Path) -> LoadOutcome {
     };
 
     match serde_json::from_str::<Deck>(&raw) {
-        Ok(deck) => LoadOutcome {
-            deck,
-            recovered_from: None,
-            warnings: Vec::new(),
-        },
+        Ok(mut deck) => {
+            migrar(&mut deck, &raw);
+            LoadOutcome {
+                deck,
+                recovered_from: None,
+                warnings: Vec::new(),
+            }
+        }
         Err(err) => {
             let backup = backup_path(path);
             let moved = fs::rename(path, &backup).is_ok();
@@ -79,6 +82,29 @@ pub fn save(deck: &Deck, path: &Path) -> io::Result<()> {
     fs::write(&tmp, json)?;
     // En Windows, fs::rename reemplaza el destino existente.
     fs::rename(&tmp, path)
+}
+
+/// Ajustes de versiones anteriores que ya no existen como tales.
+///
+/// El nivel de ventana era un booleano `always_on_top`. Al convertirse en los
+/// tres niveles de `window_level`, un deck antiguo con el booleano en false
+/// habria quedado en el nivel por defecto (encima de todo), que es justo lo
+/// contrario de lo que el usuario habia elegido.
+fn migrar(deck: &mut Deck, raw: &str) {
+    let Ok(valor) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return;
+    };
+    let ajustes = &valor["settings"];
+    if ajustes.get("window_level").is_some() {
+        return; // ya viene con el campo nuevo
+    }
+    if let Some(encima) = ajustes.get("always_on_top").and_then(|v| v.as_bool()) {
+        deck.settings.window_level = if encima {
+            crate::model::WindowLevel::Top
+        } else {
+            crate::model::WindowLevel::Normal
+        };
+    }
 }
 
 fn backup_path(path: &Path) -> PathBuf {
@@ -315,6 +341,45 @@ mod tests {
     }
 
     #[test]
+    fn un_deck_antiguo_conserva_el_nivel_de_ventana_que_tenia() {
+        use crate::model::WindowLevel;
+        let dir = temp_dir("migracion");
+        let path = dir.join("deck.json");
+
+        // Formato viejo: el nivel era un booleano.
+        fs::write(
+            &path,
+            r#"{ "root": "s-root", "settings": { "always_on_top": false },
+                 "surfaces": { "s-root": { "name": "X" } } }"#,
+        )
+        .unwrap();
+        assert_eq!(load(&path).deck.settings.window_level, WindowLevel::Normal);
+
+        fs::write(
+            &path,
+            r#"{ "root": "s-root", "settings": { "always_on_top": true },
+                 "surfaces": { "s-root": { "name": "X" } } }"#,
+        )
+        .unwrap();
+        assert_eq!(load(&path).deck.settings.window_level, WindowLevel::Top);
+    }
+
+    #[test]
+    fn el_campo_nuevo_tiene_prioridad_sobre_el_viejo() {
+        use crate::model::WindowLevel;
+        let dir = temp_dir("migracion2");
+        let path = dir.join("deck.json");
+        fs::write(
+            &path,
+            r#"{ "root": "s-root",
+                 "settings": { "always_on_top": true, "window_level": "desktop" },
+                 "surfaces": { "s-root": { "name": "X" } } }"#,
+        )
+        .unwrap();
+        assert_eq!(load(&path).deck.settings.window_level, WindowLevel::Desktop);
+    }
+
+    #[test]
     fn campos_faltantes_toman_valores_por_defecto() {
         let dir = temp_dir("defaults");
         let path = dir.join("deck.json");
@@ -330,7 +395,7 @@ mod tests {
         assert_eq!(deck.settings.grid.cols, 5);
         assert_eq!(deck.settings.grid.rows, 3);
         assert_eq!(deck.settings.key_size, 96);
-        assert!(deck.settings.always_on_top);
+        assert_eq!(deck.settings.window_level, crate::model::WindowLevel::Top);
         assert!(deck.surfaces["s-root"].pages.is_empty());
     }
 

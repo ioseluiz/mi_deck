@@ -85,7 +85,7 @@ Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura
 ## Comprobaciones
 
 ```powershell
-cargo test                      # 59 pruebas: store, integridad, lanzador, imágenes, íconos, edición
+cargo test                      # 75 pruebas: store, integridad, lanzador, imágenes, íconos, edición
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
 ```
@@ -109,7 +109,9 @@ cargo fmt -- --check
 | Soltar un `.exe`, carpeta o acceso directo | Crea una tecla en esa celda |
 | Soltar una imagen sobre una tecla | Le cambia la cara, sin tocar su acción |
 | `Ctrl+V` con el cursor sobre una tecla | Pega la imagen del portapapeles |
-| Chincheta de la barra de título | Fija o suelta "siempre encima" |
+| Chincheta de la barra de título | Alterna entre "siempre encima" y "nivel escritorio" |
+| Candado de la barra de título | Bloquea la posición: arrastrar ya no mueve el panel |
+| `Ctrl+Alt+Espacio` | Trae el panel al frente desde cualquier sitio |
 | Logo de GitHub en el pie | Abre el repositorio en el navegador |
 | Arrastrar la barra de título | Mueve el panel |
 | Cerrar con la X | Oculta a la bandeja; **no** sale |
@@ -118,6 +120,30 @@ cargo fmt -- --check
 
 Cerrar no termina la aplicación: es un widget, no una ventana de documento. Para
 salir de verdad, **Salir** en el menú de la bandeja.
+
+## Dónde vive el panel
+
+Tres niveles, en Ajustes o con la chincheta de la barra de título:
+
+| Nivel | Comportamiento |
+|---|---|
+| **Siempre encima** (`top`) | Por encima de todas las ventanas. Siempre a mano, pero tapa lo que tengas debajo. |
+| **Ventana normal** (`normal`) | Entra y sale del frente como cualquier otra ventana. |
+| **Nivel escritorio** (`desktop`) | Sobre el fondo de pantalla, por debajo de todo. No estorba nunca: lo ves con `Win+D` o lo traes al frente con el atajo global. |
+
+Windows no tiene una bandera "siempre debajo" equivalente a `WS_EX_TOPMOST`, así que
+el nivel escritorio se consigue empujando la ventana al fondo del orden z y
+reimponiéndolo cada vez que recibe el foco. La excepción es cuando la trae el atajo
+global: entonces se respeta delante hasta que vuelve a perder el foco, o el atajo la
+mostraría y la escondería en el mismo instante.
+
+En nivel escritorio, **pulsar el atajo otra vez la devuelve al fondo** en lugar de
+ocultarla, porque su gracia ahí es seguir estando en su sitio cuando miras el
+escritorio. En los otros niveles, la segunda pulsación sí la oculta.
+
+El atajo se cambia en Ajustes, y dejándolo en blanco se desactiva. Si la combinación
+ya la usa otra aplicación, se ignora en silencio: es un extra, no un motivo para que
+el widget no arranque.
 
 ## Configuración
 
@@ -140,7 +166,9 @@ de tipo `folder` apunta a otra superficie por id.
   "settings": {
     "grid": { "cols": 5, "rows": 3 },
     "key_size": 96,
-    "always_on_top": true,
+    "window_level": "top",
+    "lock_position": false,
+    "hotkey": "Ctrl+Alt+Space",
     "window": { "x": 1200, "y": 80 }
   },
   "root": "s-root",
@@ -282,6 +310,8 @@ src-tauri/src/
   model.rs              structs serde del deck
   edit.rs               mutaciones puras: crear, mover, duplicar, borrar
   focus.rs              traer al frente una app ya abierta
+  nivel.rs              nivel de ventana: normal, encima, escritorio
+  screen.rs             validar la posicion contra los monitores conectados
   store.rs              deck.json: carga, guardado atómico, respaldo
   integrity.rs          referencias rotas, ciclos, superficies huérfanas
   launcher.rs           build_launch() puro + execute()

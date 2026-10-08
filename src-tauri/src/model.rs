@@ -28,12 +28,30 @@ pub struct Deck {
 
 // ---------------------------------------------------------------- ajustes
 
+/// Donde vive el panel respecto a las demas ventanas.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowLevel {
+    /// Ventana corriente: entra y sale del frente con el orden z habitual.
+    Normal,
+    /// Por encima de todo, siempre. Comodo de alcanzar, pero tapa el trabajo.
+    #[default]
+    Top,
+    /// Al nivel del escritorio: por debajo de cualquier otra ventana, como los
+    /// antiguos gadgets. Nunca estorba; se ve con Win+D o con el atajo global.
+    Desktop,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub grid: Grid,
     pub key_size: u32,
-    pub always_on_top: bool,
+    pub window_level: WindowLevel,
+    /// Con el candado puesto, arrastrar la barra de titulo no mueve la ventana.
+    pub lock_position: bool,
+    /// Combinacion global que trae el panel al frente. None lo desactiva.
+    pub hotkey: Option<String>,
     pub opacity: f32,
     pub start_with_windows: bool,
     pub start_minimized: bool,
@@ -46,7 +64,9 @@ impl Default for Settings {
         Self {
             grid: Grid::default(),
             key_size: 96,
-            always_on_top: true,
+            window_level: WindowLevel::default(),
+            lock_position: false,
+            hotkey: Some("Ctrl+Alt+Space".to_string()),
             opacity: 1.0,
             start_with_windows: false,
             start_minimized: false,
