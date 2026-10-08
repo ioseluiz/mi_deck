@@ -11,6 +11,7 @@ pub mod images;
 pub mod integrity;
 pub mod launcher;
 pub mod model;
+pub mod screen;
 pub mod store;
 
 use std::collections::HashMap;
@@ -182,11 +183,50 @@ fn run_action(button_id: String, state: State<AppState>) -> Result<ActionOutcome
     Ok(ActionOutcome { navigate_to: None })
 }
 
+/// Monitores conectados, en coordenadas del escritorio virtual.
+fn monitores(window: &tauri::Window) -> Vec<screen::Rect> {
+    window
+        .available_monitors()
+        .map(|ms| {
+            ms.iter()
+                .map(|m| screen::Rect {
+                    x: m.position().x,
+                    y: m.position().y,
+                    w: m.size().width,
+                    h: m.size().height,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Tamano actual de la ventana, para decidir si una posicion la deja visible.
+fn tam_ventana(window: &tauri::Window) -> (u32, u32) {
+    window
+        .outer_size()
+        .map(|s| (s.width, s.height))
+        .unwrap_or((596, 509))
+}
+
 /// Guarda la posicion de la ventana. El frontend la llama con freno al mover.
+///
+/// Minimizar emite un evento de movimiento con la posicion centinela de Windows
+/// (-32000, -32000). Guardarla dejaba el widget fuera de toda pantalla al
+/// reabrir, corriendo pero inalcanzable: por eso se descarta toda posicion que
+/// no quede visible en algun monitor.
 #[tauri::command]
-fn save_window_pos(x: i32, y: i32, state: State<AppState>) -> Result<(), String> {
+fn save_window_pos(
+    x: i32,
+    y: i32,
+    window: tauri::Window,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let pos = WindowPos { x, y };
+    if !screen::es_alcanzable(pos, tam_ventana(&window), &monitores(&window)) {
+        return Ok(());
+    }
     let mut deck = state.deck.lock().unwrap();
-    deck.settings.window = Some(WindowPos { x, y });
+    deck.settings.window = Some(pos);
     store::save(&deck, &state.config_path).map_err(|e| e.to_string())
 }
 
@@ -720,12 +760,19 @@ fn alternar_ventana(window: &WebviewWindow) {
 }
 
 fn guardar_posicion(window: &tauri::Window) {
-    if let Ok(pos) = window.outer_position() {
-        let state = window.state::<AppState>();
-        let mut deck = state.deck.lock().unwrap();
-        deck.settings.window = Some(WindowPos { x: pos.x, y: pos.y });
-        let _ = store::save(&deck, &state.config_path);
+    let Ok(pos) = window.outer_position() else {
+        return;
+    };
+    let pos = WindowPos { x: pos.x, y: pos.y };
+    // Misma salvaguarda que en save_window_pos: una ventana minimizada reporta
+    // una posicion que no sirve para restaurar nada.
+    if !screen::es_alcanzable(pos, tam_ventana(window), &monitores(window)) {
+        return;
     }
+    let state = window.state::<AppState>();
+    let mut deck = state.deck.lock().unwrap();
+    deck.settings.window = Some(pos);
+    let _ = store::save(&deck, &state.config_path);
 }
 
 // --------------------------------------------------------------------- bandeja
@@ -933,7 +980,14 @@ pub fn run() {
 
             // La ventana nace oculta: se coloca primero y se muestra despues, para
             // que no parpadee en la esquina equivocada al arrancar.
-            if let Some(WindowPos { x, y }) = posicion {
+            //
+            // La posicion guardada puede haber dejado de valer, por ejemplo si se
+            // desconecto el monitor donde estaba. Si no queda visible, se descarta
+            // y la ventana se queda centrada.
+            let ventana = window.as_ref().window();
+            let segura =
+                screen::posicion_segura(posicion, tam_ventana(&ventana), &monitores(&ventana));
+            if let Some(WindowPos { x, y }) = segura {
                 let _ = window.set_position(PhysicalPosition::new(x, y));
             }
             let _ = window.set_always_on_top(always_on_top);
