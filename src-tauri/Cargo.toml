@@ -1,6 +1,6 @@
 [package]
 name = "mideck"
-version = "0.1.0"
+version = "0.1.1"
 description = "Widget de escritorio tipo Stream Deck"
 authors = ["jlmunoz"]
 edition = "2021"
