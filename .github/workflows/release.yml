@@ -34,6 +34,15 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # La paleta se eligio despejando el contraste exigido; esto evita que una
+      # edicion futura lo baje sin que nadie se entere.
+      - name: Contraste de la paleta
+        run: python scripts/verificar_contraste.py
+
       - name: Formato
         working-directory: src-tauri
         run: cargo fmt --check
