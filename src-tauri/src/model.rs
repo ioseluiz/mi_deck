@@ -228,7 +228,7 @@ pub enum LabelStyle {
 
 // ------------------------------------------------------------------ acciones
 
-/// Enum etiquetado: el compilador obliga a cubrir los cinco tipos en cada `match`,
+/// Enum etiquetado: el compilador obliga a cubrir todos los tipos en cada `match`,
 /// asi que anadir uno nuevo no se puede olvidar a medias.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -266,6 +266,15 @@ pub enum Action {
     },
     /// Navega a otra superficie del deck: la carpeta del Stream Deck.
     Folder { surface: String },
+
+    /// Envia una combinacion de teclas: "Ctrl+Shift+S", "Win+D", "F5".
+    ///
+    /// Es el primitivo del que cuelgan casi todas las acciones de Windows: los
+    /// atajos de sistema, los de cualquier aplicacion y el catalogo de `system`.
+    Hotkey { keys: String },
+
+    /// Teclea un texto literal en la aplicacion que estuviera delante.
+    Text { text: String },
 }
 
 fn default_browser() -> String {
@@ -289,6 +298,8 @@ impl Action {
             Action::Path { .. } => "path",
             Action::Script { .. } => "script",
             Action::Folder { .. } => "folder",
+            Action::Hotkey { .. } => "hotkey",
+            Action::Text { .. } => "text",
         }
     }
 }

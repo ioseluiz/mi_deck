@@ -7,7 +7,7 @@
  * la raiz tiene 15 teclas utiles y una carpeta 14.
  */
 
-const ICONOS = {
+export const ICONOS = {
   folder:
     '<svg viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   "folder-open":
@@ -21,6 +21,9 @@ const ICONOS = {
   file: '<svg viewBox="0 0 24 24"><path d="M6 2h7l5 5v15H6zm7 1.5V8h4.5z"/></svg>',
   aviso:
     '<svg viewBox="0 0 24 24"><path d="M12 2 1 21h22zm0 6 7.5 11h-15zM11 11h2v5h-2zm0 6h2v2h-2z"/></svg>',
+  keyboard:
+    '<svg viewBox="0 0 24 24"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1m2 3v2h2V8zm4 0v2h2V8zm4 0v2h2V8zm4 0v2h2V8zM5 12v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM7 16v2h10v-2z"/></svg>',
+  text: '<svg viewBox="0 0 24 24"><path d="M4 4h16v4h-2V6h-5v12h2v2H9v-2h2V6H6v2H4z"/></svg>',
 };
 
 /** Icono por defecto segun el tipo de accion, cuando la tecla no define uno. */
@@ -34,6 +37,10 @@ function iconoPorAccion(accion) {
       return ICONOS.terminal;
     case "path":
       return ICONOS["folder-open"];
+    case "hotkey":
+      return ICONOS.keyboard;
+    case "text":
+      return ICONOS.text;
     case "app":
     default:
       return ICONOS.app;

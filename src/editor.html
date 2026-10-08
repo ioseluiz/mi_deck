@@ -24,6 +24,8 @@
               <option value="url">Abrir un sitio web</option>
               <option value="path">Abrir una carpeta o archivo</option>
               <option value="script">Ejecutar un script o comando</option>
+              <option value="hotkey">Enviar un atajo de teclado</option>
+              <option value="text">Escribir un texto</option>
               <option value="folder">Entrar a una carpeta del deck</option>
             </select>
           </label>
@@ -108,6 +110,41 @@
             <p class="nota aviso">
               Lo que pongas aquí se ejecuta con tus permisos. No guardes contraseñas
               ni tokens en este archivo.
+            </p>
+          </div>
+
+          <div class="grupo" data-tipo="hotkey" hidden>
+            <label class="campo">
+              <span>Combinación de teclas</span>
+              <span class="fila">
+                <input id="ed-hotkey-keys" type="text" placeholder="Ctrl+Shift+S" autocomplete="off" />
+                <button type="button" id="ed-hotkey-capturar">Capturar</button>
+              </span>
+            </label>
+            <p class="nota">
+              Modificadores: <code>Ctrl</code>, <code>Shift</code>, <code>Alt</code>,
+              <code>Win</code>. Teclas: letras, dígitos, <code>F1</code>–<code>F24</code>,
+              y nombres como <code>Esc</code>, <code>Tab</code>, <code>Supr</code>,
+              <code>Intro</code>, <code>Inicio</code>, <code>Izquierda</code>.
+            </p>
+            <p class="nota">
+              El atajo se envía a la aplicación que tuvieras delante antes de pulsar
+              el panel, no al panel.
+            </p>
+          </div>
+
+          <div class="grupo" data-tipo="text" hidden>
+            <label class="campo">
+              <span>Texto que teclear</span>
+              <textarea id="ed-text-texto" rows="4" placeholder="Tu firma, un número de proyecto, una plantilla…"></textarea>
+            </label>
+            <p class="nota">
+              Se teclea carácter a carácter en la aplicación que tuvieras delante.
+              Admite tildes, <code>ñ</code> y emoji.
+            </p>
+            <p class="nota aviso">
+              No lo uses para contraseñas: queda guardado en claro en
+              <code>deck.json</code>.
             </p>
           </div>
 

@@ -86,7 +86,7 @@ Es deliberado: `target/` son miles de archivos pequeños y sincronizarlos satura
 
 ```powershell
 python scripts/verificar_contraste.py   # contraste de la paleta
-cargo test                      # 82 pruebas: store, integridad, lanzador, imágenes, íconos, edición
+cargo test                      # 106 pruebas: store, integridad, lanzador, imágenes, íconos, edición
 cargo clippy --all-targets -- -D warnings
 cargo fmt -- --check
 ```
@@ -254,6 +254,20 @@ ejecutable se resuelve a su ruta completa antes de lanzarlo.
 | `path` | Abre una carpeta, o revela un archivo seleccionado, en el Explorador | `target` |
 | `script` | Ejecuta un script o comando | `shell` (`powershell`/`cmd`), `target`, `args`, `hidden` |
 | `folder` | Navega a otra superficie del deck | `surface` |
+| `hotkey` | Envía una combinación de teclas | `keys` |
+| `text` | Teclea un texto literal | `text` |
+
+### Atajos y texto
+
+`hotkey` envía la combinación a **la aplicación que tuvieras delante antes de pulsar
+el panel**, no al panel: un gancho de Windows recuerda cuál era y le devuelve el
+foco antes de enviar. Modificadores `Ctrl`, `Shift`, `Alt` y `Win`; teclas por
+letra, dígito, `F1`–`F24` o nombre (`Esc`, `Tab`, `Supr`, `Intro`, `Inicio`,
+`Izquierda`…), en español o en inglés. Una combinación mal escrita se detecta al
+validar y marca la tecla en rojo, sin llegar a enviar nada.
+
+`text` teclea carácter a carácter y admite tildes, `ñ` y emoji. **No lo uses para
+contraseñas**: queda en claro en `deck.json`.
 
 Cuidado con la pareja `path` y `folder`: en lenguaje coloquial ambas son "carpeta",
 pero `path` abre el Explorador de Windows y `folder` navega dentro del propio deck.
@@ -275,7 +289,7 @@ dejar diez Outlooks.
 |---|---|---|
 | `image` | `file` | Nombre dentro de la biblioteca (ver abajo). |
 | `auto` | — | Extrae el ícono de shell del destino. Para una acción `url` dibuja una pastilla con la inicial del dominio. |
-| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file` | |
+| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file`, `keyboard`, `text` | |
 | `emoji` | `char` | |
 
 Comunes a todos:

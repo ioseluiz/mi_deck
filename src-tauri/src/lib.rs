@@ -14,6 +14,7 @@ pub mod model;
 pub mod nivel;
 pub mod screen;
 pub mod store;
+pub mod teclas;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -74,7 +75,11 @@ fn destino_para_icono(action: &Action) -> Option<PathBuf> {
         Action::App { target, .. } => target,
         Action::Path { target } => target,
         Action::Script { target, .. } => target,
-        Action::Url { .. } | Action::Folder { .. } => return None,
+        // Estas no tienen archivo del que sacar un icono: lo pone el frontend.
+        Action::Url { .. }
+        | Action::Folder { .. }
+        | Action::Hotkey { .. }
+        | Action::Text { .. } => return None,
     };
 
     let expandido = launcher::expand_env(crudo);
@@ -1061,6 +1066,8 @@ pub fn run() {
                 let _ = window.set_position(PhysicalPosition::new(x, y));
             }
             nivel::aplicar(&window, nivel_inicial);
+            // Sin esto, un atajo dirigido a otra aplicacion llegaria al panel.
+            focus::vigilar_primer_plano();
             registrar_atajo(app.handle(), atajo.as_deref());
 
             if !start_minimized {

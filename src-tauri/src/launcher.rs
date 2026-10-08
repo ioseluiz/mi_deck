@@ -33,6 +33,10 @@ pub enum LaunchSpec {
     Reveal { path: String },
     /// No lanza nada: lo resuelve la navegacion del propio deck.
     Navigate { surface: String },
+    /// Enviar una combinacion de teclas.
+    Keys { combinacion: String },
+    /// Teclear un texto literal.
+    Type { texto: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +46,9 @@ pub enum LaunchError {
     /// La ruta no existe. Se devuelve con la ruta ya expandida, que es la que el
     /// usuario necesita ver para corregirla.
     NotFound { target: String },
+    /// La accion esta mal escrita: una combinacion de teclas que no se entiende.
+    /// Se detecta al validar, antes de enviar nada.
+    Invalid { motivo: String },
 }
 
 impl std::fmt::Display for LaunchError {
@@ -50,6 +57,7 @@ impl std::fmt::Display for LaunchError {
             LaunchError::Empty { kind } => {
                 write!(f, "La accion de tipo {kind} no tiene destino configurado.")
             }
+            LaunchError::Invalid { motivo } => write!(f, "{motivo}"),
             LaunchError::NotFound { target } => {
                 if target.contains(['\\', '/']) {
                     write!(f, "No se encontro: {target}")
@@ -275,6 +283,24 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             surface: surface.clone(),
         }),
 
+        Action::Hotkey { keys } => {
+            if keys.trim().is_empty() {
+                return Err(LaunchError::Empty { kind: "hotkey" });
+            }
+            Ok(LaunchSpec::Keys {
+                combinacion: keys.trim().to_string(),
+            })
+        }
+
+        Action::Text { text } => {
+            if text.is_empty() {
+                return Err(LaunchError::Empty { kind: "text" });
+            }
+            Ok(LaunchSpec::Type {
+                texto: text.clone(),
+            })
+        }
+
         Action::App {
             target,
             args,
@@ -423,6 +449,18 @@ fn programa_de_navegador(browser: &str) -> String {
 pub fn validate(spec: &LaunchSpec) -> Result<(), LaunchError> {
     match spec {
         LaunchSpec::Navigate { .. } => Ok(()),
+        // Una errata en la combinacion se detecta aqui y marca la tecla en rojo,
+        // igual que una ruta inexistente: no se envia nada a medias.
+        LaunchSpec::Keys { combinacion } => crate::teclas::parsear(combinacion)
+            .map(|_| ())
+            .map_err(|motivo| LaunchError::Invalid { motivo }),
+        LaunchSpec::Type { texto } => {
+            if texto.is_empty() {
+                Err(LaunchError::Empty { kind: "text" })
+            } else {
+                Ok(())
+            }
+        }
         LaunchSpec::Reveal { path } => existe(path),
         LaunchSpec::Shell { target } => {
             // Una URL no se comprueba contra el disco.
@@ -482,6 +520,20 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
 
     match spec {
         LaunchSpec::Navigate { .. } => Ok(()),
+
+        // Antes de enviar teclas hay que devolver el foco: al pulsar la tecla lo
+        // tiene el panel, y un Ctrl+S dirigido a Excel llegaria aqui. Si no hay
+        // ventana recordada se envia igual, porque los atajos de sistema
+        // (Win+algo) funcionan tenga el foco quien lo tenga.
+        LaunchSpec::Keys { combinacion } => {
+            crate::focus::devolver_foco();
+            crate::teclas::enviar(combinacion)
+        }
+
+        LaunchSpec::Type { texto } => {
+            crate::focus::devolver_foco();
+            crate::teclas::escribir(texto)
+        }
 
         LaunchSpec::Process {
             program,
@@ -847,6 +899,88 @@ mod tests {
                 no_window: true,
             }
         );
+    }
+
+    // ------------------------------------------------------- teclas y texto
+
+    #[test]
+    fn un_atajo_se_convierte_en_envio_de_teclas() {
+        let a = Action::Hotkey {
+            keys: "  Ctrl+Shift+S  ".into(),
+        };
+        assert_eq!(
+            build_launch(&a).unwrap(),
+            LaunchSpec::Keys {
+                combinacion: "Ctrl+Shift+S".into()
+            }
+        );
+    }
+
+    #[test]
+    fn un_atajo_con_errata_se_detecta_antes_de_enviar_nada() {
+        // Esto es lo que marca la tecla en rojo en vez de dejar que el envio
+        // falle a medias con medio teclado pulsado.
+        let spec = build_launch(&Action::Hotkey {
+            keys: "Ctrl+Inventada".into(),
+        })
+        .unwrap();
+        let Err(LaunchError::Invalid { motivo }) = validate(&spec) else {
+            panic!("una combinacion imposible deberia invalidarse");
+        };
+        assert!(motivo.contains("Inventada"), "mensaje poco util: {motivo}");
+    }
+
+    #[test]
+    fn un_atajo_valido_pasa_la_validacion_sin_tocar_el_disco() {
+        let spec = build_launch(&Action::Hotkey {
+            keys: "Win+Shift+S".into(),
+        })
+        .unwrap();
+        assert!(validate(&spec).is_ok());
+    }
+
+    #[test]
+    fn un_atajo_vacio_da_error_en_vez_de_una_tecla_muerta() {
+        assert_eq!(
+            build_launch(&Action::Hotkey { keys: "   ".into() }),
+            Err(LaunchError::Empty { kind: "hotkey" })
+        );
+    }
+
+    #[test]
+    fn un_texto_se_convierte_en_tecleo() {
+        let a = Action::Text {
+            text: "Añadir señal".into(),
+        };
+        assert_eq!(
+            build_launch(&a).unwrap(),
+            LaunchSpec::Type {
+                texto: "Añadir señal".into()
+            }
+        );
+    }
+
+    #[test]
+    fn un_texto_vacio_da_error() {
+        assert_eq!(
+            build_launch(&Action::Text {
+                text: String::new()
+            }),
+            Err(LaunchError::Empty { kind: "text" })
+        );
+    }
+
+    #[test]
+    fn los_espacios_de_un_texto_se_respetan() {
+        // A diferencia del atajo, aqui no se recorta: un texto puede empezar o
+        // acabar con espacio a proposito.
+        let a = Action::Text {
+            text: "  con margen  ".into(),
+        };
+        let LaunchSpec::Type { texto } = build_launch(&a).unwrap() else {
+            panic!("deberia ser un tecleo");
+        };
+        assert_eq!(texto, "  con margen  ");
     }
 
     // ---------------------------------------------------------------- folder

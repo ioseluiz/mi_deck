@@ -12,6 +12,7 @@
  */
 
 import { invoke, urlDeArchivo, apiDisponible } from "./api.js";
+import { ICONOS } from "./grid.js";
 
 // El contexto llega por comando, no por la URL: Tauri resuelve el recurso
 // incluyendo la cadena de consulta, asi que editor.html?modo=... no existe como
@@ -82,8 +83,14 @@ function pintarPrevia() {
     contenido = `<span class="pastilla" style="background:hsl(${h} 48% 40%)">${escapar(
       (dom[0] || "?").toUpperCase()
     )}</span>`;
+  } else if (tecla.action?.type === "hotkey") {
+    contenido = ICONOS.keyboard;
+  } else if (tecla.action?.type === "text") {
+    contenido = ICONOS.text;
   } else {
-    contenido = '<svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg>';
+    // El mapa viene de grid.js: antes habia aqui un SVG escrito a mano y la
+    // vista previa se quedaba atras cada vez que se anadia un icono.
+    contenido = ICONOS.app;
   }
 
   prev.innerHTML =
@@ -117,6 +124,9 @@ function volcarEnFormulario() {
   $("ed-url-profile").value = tipo === "url" ? a.profile ?? "" : "";
 
   $("ed-path-target").value = tipo === "path" ? a.target ?? "" : "";
+
+  $("ed-hotkey-keys").value = tipo === "hotkey" ? a.keys ?? "" : "";
+  $("ed-text-texto").value = tipo === "text" ? a.text ?? "" : "";
 
   $("ed-script-shell").value = tipo === "script" ? a.shell ?? "powershell" : "powershell";
   $("ed-script-target").value = tipo === "script" ? a.target ?? "" : "";
@@ -170,6 +180,15 @@ function leerFormulario() {
     case "folder":
       tecla.action = { type: "folder", surface: $("ed-folder-surface").value };
       break;
+    case "hotkey":
+      tecla.action = { type: "hotkey", keys: $("ed-hotkey-keys").value.trim() };
+      break;
+    case "text":
+      tecla.action = { type: "text", text: $("ed-text-texto").value };
+      break;
+    default:
+      // Sin esto, un tipo sin `case` guardaba la accion anterior sin avisar.
+      throw new Error(`Tipo de acción no contemplado: ${tipo}`);
   }
 
   const emoji = $("ed-emoji").value.trim();
@@ -321,10 +340,15 @@ async function guardar() {
     } else {
       leerFormulario();
       const m = aModelo();
-      if (m.action.type === "folder" && !m.action.surface) {
-        throw new Error("Elige una carpeta destino.");
-      }
-      if (m.action.type !== "folder" && !m.action.target) {
+      // Cada tipo tiene su propio campo obligatorio: dar por hecho que todos
+      // usan `target` impedia guardar las acciones que no lo tienen.
+      const faltante = {
+        folder: !m.action.surface && "Elige una carpeta destino.",
+        hotkey: !m.action.keys?.trim() && "Escribe la combinación de teclas.",
+        text: !m.action.text && "Escribe el texto que debe teclear.",
+      }[m.action.type];
+      if (faltante) throw new Error(faltante);
+      if (!(m.action.type in { folder: 1, hotkey: 1, text: 1 }) && !m.action.target) {
         throw new Error("Falta el destino de la acción.");
       }
       if (!m.label) m.label = etiquetaPorDefecto(m.action);
@@ -343,6 +367,11 @@ async function guardar() {
 
 /** Si el usuario no puso etiqueta, deducir una del destino. */
 function etiquetaPorDefecto(action) {
+  if (action.type === "hotkey") return action.keys ?? "Atajo";
+  if (action.type === "text") {
+    const t = (action.text ?? "").trim().split(/\s+/).slice(0, 3).join(" ");
+    return t.slice(0, 24) || "Texto";
+  }
   const t = action.target ?? "";
   if (action.type === "url") {
     return (t.split("//").pop() ?? t).split("/")[0].replace(/^www\./, "");
@@ -350,6 +379,75 @@ function etiquetaPorDefecto(action) {
   const trozos = t.split(/[\\/]/);
   const nombre = trozos[trozos.length - 1] || t;
   return nombre.replace(/\.(exe|lnk|ps1|bat|cmd)$/i, "") || "Sin nombre";
+}
+
+/**
+ * Captura la siguiente combinacion que pulse el usuario y la escribe en el campo.
+ *
+ * Escribir "Ctrl+Shift+S" a mano invita a erratas y a dudar de como se llama cada
+ * tecla; pulsarla es inequivoco. Se traduce desde `KeyboardEvent.code`, que no
+ * depende de la distribucion del teclado.
+ */
+function capturarAtajo() {
+  const campo = $("ed-hotkey-keys");
+  const boton = $("ed-hotkey-capturar");
+  const textoOriginal = boton.textContent;
+  boton.textContent = "Pulsa…";
+  boton.disabled = true;
+  campo.value = "";
+
+  const nombreDe = (ev) => {
+    const c = ev.code;
+    if (c.startsWith("Key")) return c.slice(3);
+    if (c.startsWith("Digit")) return c.slice(5);
+    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(c)) return c;
+    return {
+      Escape: "Esc", Enter: "Intro", NumpadEnter: "Intro", Tab: "Tab",
+      Space: "Space", Backspace: "Backspace", Delete: "Supr", Insert: "Ins",
+      Home: "Inicio", End: "Fin", PageUp: "PageUp", PageDown: "PageDown",
+      ArrowLeft: "Izquierda", ArrowRight: "Derecha", ArrowUp: "Arriba",
+      ArrowDown: "Abajo", Period: "Punto", NumpadDecimal: "Punto",
+      Comma: "Coma", PrintScreen: "PrtScn",
+    }[c] ?? null;
+  };
+
+  const terminar = (texto) => {
+    window.removeEventListener("keydown", alPulsar, true);
+    boton.textContent = textoOriginal;
+    boton.disabled = false;
+    if (texto) {
+      campo.value = texto;
+      leerFormulario();
+      if (!$("ed-label").value) {
+        $("ed-label").value = etiquetaPorDefecto(tecla.action);
+        leerFormulario();
+      }
+      pintarPrevia();
+    }
+  };
+
+  const alPulsar = (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (ev.key === "Escape" && !ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey) {
+      terminar(null); // Escape a secas cancela la captura
+      return;
+    }
+    const base = nombreDe(ev);
+    // Mientras solo haya modificadores pulsados no hay nada que capturar.
+    if (!base) return;
+
+    const partes = [];
+    if (ev.ctrlKey) partes.push("Ctrl");
+    if (ev.shiftKey) partes.push("Shift");
+    if (ev.altKey) partes.push("Alt");
+    if (ev.metaKey) partes.push("Win");
+    partes.push(base);
+    terminar(partes.join("+"));
+  };
+
+  // En captura, para adelantarse a los atajos de la propia ventana.
+  window.addEventListener("keydown", alPulsar, true);
 }
 
 function conectar() {
@@ -365,6 +463,8 @@ function conectar() {
     "ed-fit",
     "ed-labelstyle",
     "ed-url-target",
+    "ed-hotkey-keys",
+    "ed-text-texto",
   ]) {
     $(id).addEventListener("input", () => {
       leerFormulario();
