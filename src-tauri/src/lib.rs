@@ -97,15 +97,6 @@ pub struct ActionOutcome {
     message: Option<String>,
 }
 
-impl ActionOutcome {
-    fn nada() -> Self {
-        Self {
-            navigate_to: None,
-            message: None,
-        }
-    }
-}
-
 // -------------------------------------------------------- resolucion de iconos
 
 /// Archivo del que sacar el icono automatico de una accion.
@@ -217,21 +208,6 @@ fn run_action(
     // cubierta por tests: meterle una llamada a COM la dejaria sin poder probarse.
     // La consulta solo ocurre si la tecla menciona la variable.
     let accion = explorador::con_variables(accion, explorador::carpeta_disponible)?;
-
-    // Si la tecla pide traer al frente lo que ya este abierto, se intenta antes
-    // de lanzar: pulsarla diez veces no debe dejar diez copias de la aplicacion.
-    if let Action::App {
-        target,
-        focus_if_running: true,
-        ..
-    } = &accion
-    {
-        if let Some(ruta) = launcher::resolve_program(&launcher::expand_env(target)) {
-            if focus::focus_running(&ruta) {
-                return Ok(ActionOutcome::nada());
-            }
-        }
-    }
 
     let spec = launcher::build_launch(&accion).map_err(|e| e.to_string())?;
 

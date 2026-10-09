@@ -45,6 +45,12 @@ pub enum LaunchSpec {
         args: Vec<String>,
         workdir: Option<String>,
         no_window: bool,
+        /// Si ya hay una copia corriendo, traerla al frente en vez de abrir otra.
+        ///
+        /// Vive aqui y no solo en la accion porque un paso de macro tambien tiene
+        /// que poder hacerlo: antes la marca estaba en el modelo, el editor la
+        /// aceptaba y dentro de una macro se ignoraba en silencio.
+        enfocar_si_corre: bool,
     },
     /// Delegar en el shell de Windows: resuelve .lnk, carpetas y URLs, y respeta
     /// la app predeterminada del usuario.
@@ -353,7 +359,7 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             target,
             args,
             workdir,
-            ..
+            focus_if_running,
         } => {
             let target = expand_env(target);
             if target.trim().is_empty() {
@@ -374,6 +380,7 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
                 args: args_v,
                 workdir: (!workdir.trim().is_empty()).then_some(workdir),
                 no_window: true,
+                enfocar_si_corre: *focus_if_running,
             })
         }
 
@@ -403,6 +410,7 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
                 args,
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             })
         }
 
@@ -463,6 +471,7 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
                 args,
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             })
         }
 
@@ -635,6 +644,7 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
                 args: argv,
                 workdir: None,
                 no_window: *hidden,
+                enfocar_si_corre: false,
             })
         }
     }
@@ -832,7 +842,20 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
             args,
             workdir,
             no_window,
+            enfocar_si_corre,
         } => {
+            // Antes esto vivia solo en run_action, que mira la accion de la tecla:
+            // dentro de una macro la marca se ignoraba en silencio, porque para
+            // entonces ya era un lanzamiento y la accion no estaba. Aqui lo ve
+            // todo el mundo igual, la tecla suelta y el paso de macro.
+            if *enfocar_si_corre {
+                if let Some(ruta) = resolve_program(program) {
+                    if crate::focus::focus_running(&ruta) {
+                        return Ok(());
+                    }
+                }
+            }
+
             // CreateProcess tampoco consulta App Paths, asi que no basta con
             // haberlo validado: hay que entregarle la ruta ya resuelta o un
             // "chrome.exe" suelto falla con "program not found".
@@ -926,7 +949,82 @@ fn open_with_shell(target: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::MacroStep;
     use crate::model::{Action, Shell};
+
+    #[test]
+    fn un_paso_de_macro_conserva_la_marca_de_traer_al_frente() {
+        // La marca viajaba en la accion, y run_action solo miraba la accion de la
+        // tecla: dentro de una macro se aceptaba y se ignoraba en silencio, asi
+        // que pulsar dos veces dejaba dos copias abiertas. Ahora viaja en el
+        // lanzamiento, que es lo que ve quien lo ejecuta.
+        let accion = Action::Macro {
+            steps: vec![MacroStep {
+                action: Box::new(Action::App {
+                    target: "notepad.exe".into(),
+                    args: String::new(),
+                    workdir: String::new(),
+                    focus_if_running: true,
+                }),
+                delay_ms: 0,
+            }],
+        };
+
+        let LaunchSpec::Secuencia(pasos) = build_launch(&accion).unwrap() else {
+            panic!("deberia ser una secuencia");
+        };
+        let LaunchSpec::Process {
+            enfocar_si_corre, ..
+        } = &pasos[0].spec
+        else {
+            panic!("el paso deberia ser un proceso");
+        };
+        assert!(enfocar_si_corre, "el paso perdio la marca");
+    }
+
+    #[test]
+    fn sin_la_marca_el_paso_no_la_inventa() {
+        let accion = Action::App {
+            target: "notepad.exe".into(),
+            args: String::new(),
+            workdir: String::new(),
+            focus_if_running: false,
+        };
+        let LaunchSpec::Process {
+            enfocar_si_corre, ..
+        } = build_launch(&accion).unwrap()
+        else {
+            panic!("deberia ser un proceso");
+        };
+        assert!(!enfocar_si_corre);
+    }
+
+    #[test]
+    fn un_navegador_o_un_script_nunca_traen_al_frente() {
+        // Abrir una direccion siempre abre la direccion: si se "enfocara" el
+        // navegador ya abierto, la tecla no haria nada visible.
+        for accion in [
+            Action::Url {
+                target: "https://ejemplo".into(),
+                browser: "chrome".into(),
+                profile: None,
+            },
+            Action::Script {
+                shell: Shell::Powershell,
+                target: "Get-Date".into(),
+                args: String::new(),
+                hidden: false,
+            },
+        ] {
+            let LaunchSpec::Process {
+                enfocar_si_corre, ..
+            } = build_launch(&accion).unwrap()
+            else {
+                panic!("deberia ser un proceso");
+            };
+            assert!(!enfocar_si_corre, "{} no deberia enfocar", accion.kind());
+        }
+    }
 
     #[test]
     fn una_carpeta_no_es_un_comando() {
@@ -1037,6 +1135,7 @@ mod tests {
                 args: vec!["--flag".into(), "dos palabras".into()],
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             }
         );
     }
@@ -1095,6 +1194,7 @@ mod tests {
                 ],
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             }
         );
     }
@@ -1149,6 +1249,7 @@ mod tests {
             args: vec![],
             workdir: None,
             no_window: true,
+            enfocar_si_corre: false,
         };
         assert!(validate(&ok).is_ok());
 
@@ -1159,6 +1260,7 @@ mod tests {
             args: vec![],
             workdir: None,
             no_window: true,
+            enfocar_si_corre: false,
         };
         assert!(matches!(validate(&mal), Err(LaunchError::NotFound { .. })));
     }
@@ -1258,6 +1360,7 @@ mod tests {
                 ],
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             }
         );
     }
@@ -1299,6 +1402,7 @@ mod tests {
                 args: vec!["/c".into(), "C:\\s\\tarea.bat".into()],
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             }
         );
     }
@@ -1373,6 +1477,7 @@ mod tests {
                 ],
                 workdir: None,
                 no_window: true,
+                enfocar_si_corre: false,
             }
         );
     }
