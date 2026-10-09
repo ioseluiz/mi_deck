@@ -189,6 +189,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Path {
                             target: "%USERPROFILE%".into(),
                         },
+                        states: Vec::new(),
                         wheel: None,
                         live: None,
                         extra: Default::default(),
@@ -204,6 +205,7 @@ pub fn default_deck() -> Deck {
                             workdir: String::new(),
                             focus_if_running: false,
                         },
+                        states: Vec::new(),
                         wheel: None,
                         live: None,
                         extra: Default::default(),
@@ -221,6 +223,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Folder {
                             surface: "s-ejemplos".into(),
                         },
+                        states: Vec::new(),
                         wheel: None,
                         live: None,
                         extra: Default::default(),
@@ -246,6 +249,7 @@ pub fn default_deck() -> Deck {
                             browser: "default".into(),
                             profile: None,
                         },
+                        states: Vec::new(),
                         wheel: None,
                         live: None,
                         extra: Default::default(),
@@ -263,6 +267,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Path {
                             target: "%USERPROFILE%\\Downloads".into(),
                         },
+                        states: Vec::new(),
                         wheel: None,
                         live: None,
                         extra: Default::default(),
@@ -283,6 +288,7 @@ pub fn default_deck() -> Deck {
                             args: String::new(),
                             hidden: false,
                         },
+                        states: Vec::new(),
                         wheel: None,
                         live: None,
                         extra: Default::default(),

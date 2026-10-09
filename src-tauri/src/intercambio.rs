@@ -268,6 +268,7 @@ mod tests {
                 ..Icon::default()
             },
             action: accion,
+            states: Vec::new(),
             wheel: None,
             live: None,
             extra: Default::default(),

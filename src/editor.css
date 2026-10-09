@@ -462,3 +462,13 @@ textarea {
   color: var(--texto-tenue);
   font-size: 11.5px;
 }
+
+/* Las caras reusan .paso; sus campos tienen anchos propios. */
+.paso [data-campo="etiqueta"] { flex: 1 1 0; min-width: 0; }
+.paso [data-campo="emoji"] { flex: 0 0 48px; text-align: center; }
+
+#ed-caras:empty::after {
+  content: "Una sola cara. Añade otra para que la tecla alterne.";
+  color: var(--texto-tenue);
+  font-size: 11.5px;
+}

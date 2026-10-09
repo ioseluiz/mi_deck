@@ -87,6 +87,8 @@ let perfilMostrado = { surface: null, nombre: null };
 let perfilFijado = false;
 /** id de tecla -> lo que ensena del sistema. Lo manda Rust, no se calcula aqui. */
 let vivo = {};
+/** id de tecla -> que cara ensena. Lo decide Rust, aqui solo se pinta. */
+let caras = {};
 /** id de boton -> URL de su imagen, ya lista para un <img>. */
 let urls = {};
 let temporizadorToast = 0;
@@ -116,7 +118,7 @@ function pintar(direccion = null) {
   // ya no estan donde estaban.
   cerrarMenu();
 
-  render($grid, nav, { rotas, urls, armada, vivo });
+  render($grid, nav, { rotas, urls, armada, vivo, caras });
   renderMigas($migas, nav);
 
   const paginas = nav.pageCount;
@@ -423,6 +425,12 @@ async function pulsar(botonId) {
 
   try {
     const salida = await invoke("run_action", { buttonId: botonId });
+    // La tecla acaba de cambiar de cara: se repinta con lo que dice la respuesta,
+    // sin recargar el deck entero por una pulsacion.
+    if (typeof salida?.cara === "number") {
+      caras = { ...caras, [botonId]: salida.cara };
+      pintar();
+    }
     // Una captura que no dice donde quedo el archivo es una captura perdida.
     if (salida?.message) aviso(salida.message, "info");
     if (salida?.navigate_to) {
@@ -868,6 +876,12 @@ function conectarEdicion() {
   ventana()
     .listen("estado-vivo", (ev) => {
       vivo = ev?.payload ?? {};
+      // Una tecla de dos caras con fuente cambia de cara cuando cambia el
+      // sistema, no cuando la pulsas: aqui se recalcula con lo que acaba de
+      // llegar, sin ida y vuelta a Rust.
+      for (const [id, v] of Object.entries(vivo)) {
+        if (typeof v?.encendido === "boolean") caras[id] = v.encendido ? 0 : 1;
+      }
       pintar();
     })
     .catch((e) => console.warn("[MiDeck] no se pudo escuchar estado-vivo:", e));
@@ -900,6 +914,7 @@ function aplicarVista(vista) {
   aplicarAjustes(vista.deck.settings);
   rotas = new Set((vista.integrity?.broken ?? []).map((b) => b.button_id));
   aConfirmar = new Set(vista.confirm_required ?? []);
+  caras = vista.key_state ?? {};
   armada = null;
   clearTimeout(temporizadorArmada);
   // Rust entrega rutas absolutas; el webview solo puede cargarlas a traves del

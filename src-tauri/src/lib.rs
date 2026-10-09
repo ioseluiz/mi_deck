@@ -43,6 +43,13 @@ pub struct AppState {
     pub config_path: PathBuf,
     /// Avisos de la carga inicial (archivo corrupto, respaldo creado...).
     pub warnings: Mutex<Vec<String>>,
+    /// Que cara ensena cada tecla de varias, cuando nadie puede leerlo del
+    /// sistema.
+    ///
+    /// En memoria y no en deck.json a proposito: `run_action` no escribe en
+    /// disco, y guardarlo seria una escritura por pulsacion. Se pierde al
+    /// reiniciar, que para «grabar/parar» es justo lo correcto.
+    pub caras: Mutex<HashMap<String, usize>>,
 }
 
 /// Entradas marcables de la bandeja. Se guardan para que su estado no se
@@ -69,6 +76,8 @@ pub struct DeckView {
     /// porque no es configuracion sino estado de este instante. En `deck.json` no
     /// pinta nada.
     live: HashMap<String, vivo::Valor>,
+    /// id de boton -> que cara ensena ahora, para las teclas de varias.
+    key_state: HashMap<String, usize>,
     /// Botones que exigen pulsar dos veces antes de ejecutarse.
     ///
     /// Quien decide que es peligroso es el catalogo de Rust, no el frontend: asi
@@ -99,6 +108,12 @@ fn botones_a_confirmar(deck: &Deck) -> Vec<String> {
 #[derive(Serialize)]
 pub struct ActionOutcome {
     navigate_to: Option<String>,
+    /// La cara que pasa a verse, si la tecla tiene varias y acaba de avanzar.
+    ///
+    /// Viaja en la respuesta para que el panel repinte sin recargar el deck
+    /// entero por una pulsacion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cara: Option<usize>,
     /// Aviso que mostrar al usuario. Una captura que no dice donde quedo el
     /// archivo es una captura que el usuario no encuentra.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -185,6 +200,27 @@ fn vigilar_estado_vivo(app: AppHandle) {
     }
 }
 
+/// Que cara ensena ahora cada tecla de varias caras.
+///
+/// Solo las que tienen mas de una: un mapa con todas seria ruido en cada vista.
+fn caras_visibles(
+    deck: &Deck,
+    recordadas: &HashMap<String, usize>,
+    vivo: &HashMap<String, vivo::Valor>,
+) -> HashMap<String, usize> {
+    deck.surfaces
+        .values()
+        .flat_map(|s| s.pages.iter())
+        .flat_map(|p| p.buttons.iter())
+        .filter(|b| !b.states.is_empty())
+        .map(|b| {
+            let recordada = recordadas.get(&b.id).copied().unwrap_or(0);
+            let encendido = vivo.get(&b.id).and_then(|v| v.encendido);
+            (b.id.clone(), b.cara(recordada, encendido))
+        })
+        .collect()
+}
+
 fn estado_vivo(deck: &Deck) -> HashMap<String, vivo::Valor> {
     let con_fuente: Vec<(&str, &vivo::Fuente)> = deck
         .surfaces
@@ -240,6 +276,7 @@ fn get_deck(state: State<AppState>) -> DeckView {
     let deck = state.deck.lock().unwrap();
     DeckView {
         integrity: integrity::check(&deck),
+        key_state: caras_visibles(&deck, &state.caras.lock().unwrap(), &estado_vivo(&deck)),
         icon_paths: resolver_iconos(&deck),
         confirm_required: botones_a_confirmar(&deck),
         live: estado_vivo(&deck),
@@ -274,10 +311,34 @@ fn run_action(
     button_id: String,
     state: State<AppState>,
 ) -> Result<ActionOutcome, String> {
-    let accion = {
+    // La cara que se ve decide que accion se ejecuta: pulsar una tecla de
+    // silenciar/activar tiene que hacer lo que pone en ella, no siempre lo mismo.
+    let (accion, cara_nueva) = {
         let deck = state.deck.lock().unwrap();
-        find_action(&deck, &button_id)
-            .ok_or_else(|| format!("No existe el boton {button_id} en el deck."))?
+        let boton = buscar_boton(&deck, &button_id)
+            .ok_or_else(|| format!("No existe el boton {button_id} en el deck."))?;
+
+        let encendido = boton
+            .live
+            .as_ref()
+            .map(|f| vivo::valor_de(f, &vivo::leer(std::slice::from_ref(f))))
+            .and_then(|v| v.encendido);
+
+        let mut caras = state.caras.lock().unwrap();
+        let recordada = caras.get(&button_id).copied().unwrap_or(0);
+        let cara = boton.cara(recordada, encendido);
+        let accion = boton.accion_de_cara(cara).clone();
+
+        // El contador solo avanza si nadie puede leer el estado de verdad: con
+        // fuente manda ella, y avanzar aqui la contradiria durante un segundo.
+        let nueva = if boton.states.is_empty() || encendido.is_some() {
+            None
+        } else {
+            let siguiente = (cara + 1) % (boton.states.len() + 1);
+            caras.insert(button_id.clone(), siguiente);
+            Some(siguiente)
+        };
+        (accion, nueva)
     };
 
     // %CARPETA% se resuelve aqui y no dentro de `expand_env`, que es pura y esta
@@ -299,6 +360,7 @@ fn run_action(
         return Ok(ActionOutcome {
             navigate_to: Some(surface.clone()),
             message: None,
+            cara: cara_nueva,
         });
     }
 
@@ -306,6 +368,7 @@ fn run_action(
     Ok(ActionOutcome {
         navigate_to: None,
         message,
+        cara: cara_nueva,
     })
 }
 
@@ -640,6 +703,7 @@ fn guardar_y_devolver(state: &State<AppState>) -> Result<DeckView, String> {
     store::save(&deck, &state.config_path).map_err(|e| e.to_string())?;
     Ok(DeckView {
         integrity: integrity::check(&deck),
+        key_state: caras_visibles(&deck, &state.caras.lock().unwrap(), &estado_vivo(&deck)),
         icon_paths: resolver_iconos(&deck),
         confirm_required: botones_a_confirmar(&deck),
         live: estado_vivo(&deck),
@@ -1135,6 +1199,7 @@ fn drop_paths(
                 // Una imagen soltada se convierte en la cara de su propia tecla.
                 icon: images::icono_para(p),
                 action,
+                states: Vec::new(),
                 wheel: None,
                 live: None,
                 extra: Default::default(),
@@ -1171,6 +1236,7 @@ fn drop_url(
                 browser: "default".to_string(),
                 profile: None,
             },
+            states: Vec::new(),
             wheel: None,
             live: None,
             extra: Default::default(),
@@ -1620,6 +1686,7 @@ pub fn run() {
         deck: Mutex::new(cargado.deck),
         config_path,
         warnings: Mutex::new(cargado.warnings),
+        caras: Mutex::new(HashMap::new()),
     };
 
     let mut builder = tauri::Builder::default();

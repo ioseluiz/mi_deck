@@ -260,7 +260,14 @@ export function render(contenedor, nav, ctx) {
       continue;
     }
 
-    const icon = b.icon ?? {};
+    // La cara que toca: la 0 es la tecla de siempre, las demas salen de `states`.
+    // Quien decide cual es Rust, igual que con las teclas peligrosas: el panel
+    // solo pinta lo que le dicen.
+    const cara = b.states?.length ? (ctx.caras?.[b.id] ?? 0) : 0;
+    const estado = cara > 0 ? b.states[cara - 1] : null;
+    const etiqueta = estado ? estado.label : b.label;
+
+    const icon = (estado?.icon ?? b.icon) ?? {};
     const clases = ["key"];
     if (b.action?.type === "folder") clases.push("key--carpeta");
     // Una rueda que no se ve no la usa nadie: la marca de la esquina es lo unico
@@ -290,10 +297,12 @@ export function render(contenedor, nav, ctx) {
     partes.push(
       `<button class="${clases.join(" ")}" data-boton="${escapar(b.id)}" ` +
         `data-indice="${i}"${fondo} ` +
-        `title="${escapar(armada ? "Pulsa otra vez para confirmar" : b.label || "")}">` +
-        `<span class="key-icono">${rota ? ICONOS.aviso : pintarIcono(b, ctx.urls)}</span>` +
+        `title="${escapar(armada ? "Pulsa otra vez para confirmar" : etiqueta || "")}">` +
+        `<span class="key-icono">${
+          rota ? ICONOS.aviso : pintarIcono(estado ? { ...b, ...estado } : b, ctx.urls)
+        }</span>` +
         `<span class="key-etiqueta">${
-          armada ? "¿Seguro?" : escapar(b.label || "")
+          armada ? "¿Seguro?" : escapar(etiqueta || "")
         }</span>` +
         (vivo?.texto ? `<span class="key-valor">${escapar(vivo.texto)}</span>` : "") +
         (vivo?.encendido === false ? `<span class="key-tachado"></span>` : "") +

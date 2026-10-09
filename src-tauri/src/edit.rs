@@ -294,6 +294,7 @@ pub fn create_folder(
         action: Action::Folder {
             surface: sid_nueva.clone(),
         },
+        states: Vec::new(),
         wheel: None,
         live: None,
         extra: Default::default(),
@@ -943,6 +944,7 @@ mod tests {
                 workdir: String::new(),
                 focus_if_running: false,
             },
+            states: Vec::new(),
             wheel: None,
             live: None,
             extra: Default::default(),

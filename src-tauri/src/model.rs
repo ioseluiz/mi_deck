@@ -213,6 +213,12 @@ pub struct DeckButton {
     pub icon: Icon,
     #[serde(deserialize_with = "accion_tolerante")]
     pub action: Action,
+    /// Caras adicionales de la tecla, que se alternan al pulsarla.
+    ///
+    /// La cara 0 son el `label`, el `icon` y la `action` de arriba, asi que una
+    /// tecla de siempre no cambia ni un byte en deck.json.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub states: Vec<KeyState>,
     /// Que hace la rueda del raton sobre esta tecla.
     ///
     /// Es la respuesta en software al dial de una consola: subir y bajar algo sin
@@ -235,6 +241,62 @@ pub struct DeckButton {
     /// la tecla de todo lo que no entendiera.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Una cara mas de una tecla: silenciar/activar, grabar/parar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyState {
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub icon: Icon,
+    /// Si falta, la cara existe pero no hace nada.
+    ///
+    /// Sin el `default`, una cara escrita por una version mas nueva con otra
+    /// forma rompia la tecla entera, y una tecla ilegible se lleva el deck: se da
+    /// por corrupto y se repone de cero. Lo encontro el mismo test que ya pillo
+    /// lo de las fuentes. Una cara inerte es un fallo que se ve y se arregla; un
+    /// deck perdido, no.
+    #[serde(default = "accion_inerte", deserialize_with = "accion_tolerante")]
+    pub action: Action,
+}
+
+/// Una accion que no hace nada, para una cara a la que le falta la suya.
+fn accion_inerte() -> Action {
+    Action::Unknown {
+        raw: serde_json::Map::new(),
+    }
+}
+
+impl DeckButton {
+    /// Que cara se ve ahora.
+    ///
+    /// Si la tecla tiene una fuente que da un si o un no, manda ella: asi
+    /// silenciar el micro desde Teams cambia la cara sin que MiDeck haga nada. Si
+    /// no la hay, manda el contador que avanza al pulsar. Pura, para poder probar
+    /// las dos vias sin encender nada.
+    ///
+    /// `encendido` mapea a la cara 0 y `apagado` a la 1: la primera cara es el
+    /// estado "normal" y la segunda el alterado, que es como se escriben.
+    pub fn cara(&self, recordado: usize, encendido: Option<bool>) -> usize {
+        let caras = self.states.len() + 1;
+        if caras == 1 {
+            return 0;
+        }
+        match encendido {
+            Some(true) => 0,
+            Some(false) => 1.min(caras - 1),
+            None => recordado % caras,
+        }
+    }
+
+    /// La accion de la cara que se ve.
+    pub fn accion_de_cara(&self, cara: usize) -> &Action {
+        match cara.checked_sub(1).and_then(|i| self.states.get(i)) {
+            Some(e) => &e.action,
+            None => &self.action,
+        }
+    }
 }
 
 /// Lo que hace la rueda sobre una tecla, en cada sentido.
@@ -514,6 +576,93 @@ mod tests_tolerancia {
         // este mismo test.
         assert_eq!(vuelta["live"]["type"], "desconocida");
         assert_eq!(vuelta["live"]["__original"]["type"], "micro_silenciado");
+    }
+
+    /// Tecla con dos caras, para las pruebas de `cara`.
+    fn de_dos_caras() -> DeckButton {
+        let mut b = leer(r#"{ "type": "hotkey", "keys": "Ctrl+M" }"#);
+        b.states = vec![KeyState {
+            label: "Activar".into(),
+            icon: Icon::default(),
+            action: Action::Hotkey {
+                keys: "Ctrl+M".into(),
+            },
+        }];
+        b
+    }
+
+    #[test]
+    fn una_cara_sin_accion_no_se_lleva_la_tecla() {
+        let crudo = r#"{
+            "id": "b1", "position": 0, "label": "X",
+            "icon": { "type": "auto" },
+            "action": { "type": "hotkey", "keys": "Ctrl+M" },
+            "states": [{ "label": "Media" }]
+        }"#;
+        let b: DeckButton = serde_json::from_str(crudo).expect("deberia leerse");
+        assert_eq!(b.states.len(), 1);
+        assert!(matches!(b.states[0].action, Action::Unknown { .. }));
+        // La tecla sigue funcionando: su primera cara es la de siempre.
+        assert!(matches!(b.accion_de_cara(0), Action::Hotkey { .. }));
+    }
+
+    #[test]
+    fn sin_caras_extra_siempre_se_ve_la_primera() {
+        let b = leer(r#"{ "type": "hotkey", "keys": "Ctrl+S" }"#);
+        assert_eq!(b.cara(0, None), 0);
+        assert_eq!(b.cara(7, None), 0, "el contador no cuenta si no hay caras");
+        assert_eq!(b.cara(0, Some(false)), 0, "ni una fuente, si no hay caras");
+    }
+
+    #[test]
+    fn sin_fuente_la_cara_la_lleva_el_contador() {
+        let b = de_dos_caras();
+        assert_eq!(b.cara(0, None), 0);
+        assert_eq!(b.cara(1, None), 1);
+        assert_eq!(b.cara(2, None), 0, "da la vuelta");
+    }
+
+    #[test]
+    fn con_fuente_manda_la_fuente_y_el_contador_no_pinta_nada() {
+        // Es lo que hace que silenciar el micro desde Teams cambie la cara sin
+        // que MiDeck haya tocado nada.
+        let b = de_dos_caras();
+        assert_eq!(b.cara(0, Some(false)), 1);
+        assert_eq!(b.cara(1, Some(true)), 0);
+        assert_eq!(b.cara(99, Some(false)), 1);
+    }
+
+    #[test]
+    fn cada_cara_lleva_su_propia_accion() {
+        let mut b = de_dos_caras();
+        b.states[0].action = Action::Text {
+            text: "otra".into(),
+        };
+        assert!(matches!(b.accion_de_cara(0), Action::Hotkey { .. }));
+        assert!(matches!(b.accion_de_cara(1), Action::Text { .. }));
+        // Una cara que no existe cae en la primera en vez de romper.
+        assert!(matches!(b.accion_de_cara(9), Action::Hotkey { .. }));
+    }
+
+    #[test]
+    fn una_tecla_de_dos_caras_sobrevive_a_una_vuelta_completa() {
+        let crudo = r#"{
+            "id": "b1", "position": 0, "label": "Silenciar",
+            "icon": { "type": "auto" },
+            "action": { "type": "hotkey", "keys": "Ctrl+M" },
+            "states": [{
+                "label": "Activar",
+                "icon": { "type": "builtin", "name": "silencio" },
+                "action": { "type": "hotkey", "keys": "Ctrl+M" }
+            }]
+        }"#;
+        let b: DeckButton = serde_json::from_str(crudo).expect("deberia leerse");
+        assert_eq!(b.states.len(), 1);
+        assert_eq!(b.states[0].label, "Activar");
+
+        let vuelta = serde_json::to_value(&b).unwrap();
+        assert_eq!(vuelta["states"][0]["label"], "Activar");
+        assert_eq!(vuelta["states"][0]["icon"]["name"], "silencio");
     }
 
     #[test]

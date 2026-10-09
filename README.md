@@ -483,6 +483,44 @@ las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
 
+## Teclas de varias caras
+
+Una tecla puede tener más de una cara —silenciar/activar, grabar/parar— y alternar
+al pulsarla. **Cada cara tiene su etiqueta, su icono y su acción**, y se ejecuta la
+de la cara que se ve, no siempre la misma.
+
+```json
+{ "label": "Grabar", "icon": { "type": "emoji", "char": "●" },
+  "action": { "type": "hotkey", "keys": "Ctrl+Shift+R" },
+  "states": [{
+    "label": "Parar", "icon": { "type": "emoji", "char": "■" },
+    "action": { "type": "hotkey", "keys": "Ctrl+Shift+R" }
+  }] }
+```
+
+La cara 0 son el `label`, el `icon` y la `action` de siempre, así que **una tecla
+normal no cambia ni un byte** en `deck.json`.
+
+### Quién decide qué cara se ve
+
+| | |
+|---|---|
+| Con una **fuente** que sea un sí o un no | Manda la fuente. Silenciar el micro desde Teams cambia la cara sin que MiDeck toque nada |
+| Sin fuente | La lleva MiDeck y avanza al pulsar. Vuelve a la primera al reiniciar |
+
+Lo segundo es deliberado: guardarlo en `deck.json` sería **una escritura a disco
+por pulsación**, y para «grabar/parar» volver al principio tras un reinicio es lo
+correcto, porque lo que había al otro lado también se reinició.
+
+Con fuente, el contador no avanza al pulsar: manda ella, y avanzar aquí la
+contradiría durante un segundo, hasta el siguiente latido.
+
+### Una cara sin acción
+
+No rompe nada: la cara existe y no hace nada. Sin eso, una cara escrita por una
+versión más nueva con otra forma dejaba la tecla ilegible, y **una tecla ilegible se
+lleva el deck entero**. Lo encontró el mismo test que ya pilló lo de las fuentes.
+
 ## Teclas que enseñan algo
 
 Una tecla puede mostrar información del sistema sin que la pulses: la hora, el

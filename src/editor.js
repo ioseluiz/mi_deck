@@ -336,6 +336,71 @@ function pintarRueda() {
     .join("");
 }
 
+/**
+ * Caras extra de la tecla, en forma plana como `PASOS`.
+ *
+ * @type {{etiqueta: string, emoji: string, tipo: string, valor: string, original?: any}[]}
+ */
+let CARAS = [];
+
+/** Pinta la lista de caras extra. */
+function pintarCaras() {
+  $("ed-caras").innerHTML = CARAS.map((c, i) => {
+    const tipos = TIPOS_DE_PASO.map(
+      (t) =>
+        `<option value="${t.tipo}"${t.tipo === c.tipo ? " selected" : ""}>` +
+        `${escapar(t.etiqueta)}</option>`
+    ).join("");
+    const campo =
+      c.tipo === "system"
+        ? `<select data-campo="valor">${opcionesSistema(c.valor)}</select>`
+        : `<input data-campo="valor" type="text" value="${escapar(c.valor)}" ` +
+          `placeholder="${escapar(pistaDe(c.tipo))}">`;
+    return (
+      `<div class="paso" data-cara="${i}">` +
+      `<span class="paso-n">${i + 2}</span>` +
+      `<input data-campo="etiqueta" type="text" value="${escapar(c.etiqueta)}" ` +
+      `placeholder="etiqueta" maxlength="40">` +
+      `<input data-campo="emoji" type="text" value="${escapar(c.emoji)}" ` +
+      `placeholder="icono" maxlength="4" title="Un emoji, o vacío para el mismo icono">` +
+      `<select data-campo="tipo">${tipos}</select>` +
+      campo +
+      `<button type="button" data-accion="quitar" title="Quitar esta cara">✕</button>` +
+      `</div>`
+    );
+  }).join("");
+}
+
+/** Las caras en el formato del modelo. */
+function carasAModelo() {
+  return CARAS.map((c) => {
+    const icon = c.emoji ? { type: "emoji", char: c.emoji } : { type: "auto" };
+    return { label: c.etiqueta, icon, action: accionDePaso(c) };
+  });
+}
+
+/** Y al reves. */
+function carasDesdeModelo(states) {
+  return (states ?? []).map((e) => {
+    const a = e.action ?? {};
+    const valor =
+      a.type === "hotkey"
+        ? a.keys ?? ""
+        : a.type === "text"
+          ? a.text ?? ""
+          : a.type === "system"
+            ? a.command ?? ""
+            : a.target ?? "";
+    return {
+      etiqueta: e.label ?? "",
+      emoji: e.icon?.type === "emoji" ? (e.icon.char ?? "") : "",
+      tipo: TIPOS_DE_PASO.some((t) => t.tipo === a.type) ? a.type : "hotkey",
+      valor: String(valor),
+      original: a,
+    };
+  });
+}
+
 /** La fuente elegida en el formulario, o null. */
 function fuenteAModelo() {
   const tipo = $("ed-live").value;
@@ -563,6 +628,9 @@ function volcarEnFormulario() {
 
   volcarFuente(tecla.live);
 
+  CARAS = carasDesdeModelo(tecla.states);
+  pintarCaras();
+
   if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
   mostrarAvisoSistema();
   prepararDesconocida(tipo, a);
@@ -682,6 +750,9 @@ function leerFormulario() {
   const fuente = fuenteAModelo();
   if (fuente) tecla.live = fuente;
   else delete tecla.live;
+
+  if (CARAS.length) tecla.states = carasAModelo();
+  else delete tecla.states;
 }
 
 /**
@@ -1144,6 +1215,37 @@ function conectar() {
     leerFormulario();
     refrescarIconoAuto();
     pintarPrevia();
+  });
+
+  $("ed-cara-anadir").addEventListener("click", () => {
+    CARAS.push({ etiqueta: "", emoji: "", tipo: "hotkey", valor: "" });
+    pintarCaras();
+    leerFormulario();
+  });
+
+  $("ed-caras").addEventListener("click", (ev) => {
+    if (ev.target?.getAttribute?.("data-accion") !== "quitar") return;
+    const i = Number(ev.target.closest("[data-cara]")?.getAttribute("data-cara"));
+    if (!Number.isInteger(i)) return;
+    CARAS.splice(i, 1);
+    pintarCaras();
+    leerFormulario();
+  });
+
+  $("ed-caras").addEventListener("input", (ev) => {
+    const campo = ev.target?.getAttribute?.("data-campo");
+    const i = Number(ev.target.closest("[data-cara]")?.getAttribute("data-cara"));
+    if (!campo || !Number.isInteger(i) || !CARAS[i]) return;
+
+    if (campo === "tipo") {
+      CARAS[i].tipo = ev.target.value;
+      CARAS[i].valor = "";
+      delete CARAS[i].original;
+      pintarCaras();
+    } else {
+      CARAS[i][campo] = ev.target.value;
+    }
+    leerFormulario();
   });
 
   $("ed-live").addEventListener("change", () => {

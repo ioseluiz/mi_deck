@@ -280,6 +280,7 @@ mod tests {
                 action: Action::Folder {
                     surface: to.to_string(),
                 },
+                states: Vec::new(),
                 wheel: None,
                 live: None,
                 extra: Default::default(),
