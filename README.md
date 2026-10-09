@@ -103,6 +103,7 @@ cargo fmt -- --check
 | `Ctrl+E` | Abre `deck.json` en el editor predeterminado |
 | `F5` | Relee `deck.json` del disco sin reiniciar |
 | Botón **menú** de la barra de título | Nueva tecla, nueva carpeta, páginas, ajustes, abrir `deck.json`, recargar |
+| Botón **ancla** de la barra de título | Solo aparece con un perfil activo: lo fija o lo suelta |
 | Clic derecho sobre una tecla | Editar, pegar imagen, quitar imagen, duplicar, eliminar, ajustes |
 | Clic derecho sobre una celda vacía | Nueva tecla, nueva carpeta, añadir o quitar página, ajustes |
 | Clic derecho sobre las migas | Ajustes, abrir `deck.json`, recargar |
@@ -480,6 +481,70 @@ entero: se respaldaba y se arrancaba de cero, y el usuario veía que había perd
 las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
+
+## Perfiles por aplicación
+
+El panel cambia de teclas según la aplicación que tengas delante, como los
+perfiles de un Stream Deck. Un perfil **no es un tipo nuevo de cosa**: es una
+superficie normal más una regla que dice cuándo mostrarla. El registro plano ya
+admitía varios puntos de entrada; solo faltaba declararlos.
+
+```json
+"profiles": [
+  { "id": "p-excel", "surface": "s-excel", "exes": ["excel.exe"], "enabled": true }
+]
+```
+
+Viven en `Deck`, **no en `Settings`**, por dos motivos concretos:
+`update_settings` reemplaza los ajustes enteros con lo que mande el frontend, así
+que un descuido en el editor borraría todos los perfiles; y un perfil referencia
+superficies, que es contenido del deck y no una preferencia de ventana.
+
+La lista está **ordenada**: si dos perfiles cubren el mismo ejecutable, gana el
+primero. Por eso es una lista y no un mapa, cuyo orden de recorrido no se puede
+fijar.
+
+### Por nombre de ejecutable, no por ruta
+
+Se compara `excel.exe`, no la ruta completa. El mismo programa vive en sitios
+distintos según se instale por usuario o por máquina —Office y Chrome son los
+casos típicos—, y un perfil con la ruta de un equipo no serviría en el de al
+lado. El coste conocido es que `javaw.exe` o `python.exe` no distinguen dos
+aplicaciones distintas.
+
+### El ancla
+
+Con un perfil activo aparece un botón de ancla en la barra de título. Fijado, el
+panel deja de seguir a la aplicación; al soltarlo se va al perfil que toque sin
+esperar a que cambies de ventana. Es **estado de sesión y no se guarda**: un ancla
+que sobrevive al reinicio deja a alguien atrapado en un perfil sin saber por qué.
+La misma acción está en el menú ☰, para que se descubra.
+
+### Tres cosas que había que arreglar antes
+
+Ninguna rompía la compilación, y la primera era destructiva:
+
+1. **`purge_orphans` habría borrado todos los perfiles.** Una superficie de perfil
+   no cuelga de la raíz, así que el chequeo de integridad la daba por huérfana y el
+   botón «Borrar carpetas sin usar…» de Ajustes se la llevaba sin preguntar. Se
+   arregló sembrando el recorrido también desde los perfiles: los tres sitios que
+   consumen ese informe se corrigen de golpe.
+2. **La celda 0 de un perfil quedaba muerta.** El backend reservaba la celda de
+   «Volver» en toda superficie distinta de la raíz, pero un perfil se muestra como
+   nivel superior y no tiene nada a lo que volver. Ahora el criterio es «no es una
+   superficie base».
+3. **Un deck con perfiles los perdía al abrirlo con una versión anterior.** `Deck` y
+   `Settings` ganaron captura de campos desconocidos, la misma red que ya tenía
+   `Action::Unknown`. **Protege de la v0.3 en adelante, no hacia atrás.**
+
+### El `emit` que no entregaba nada
+
+El aviso de cambio de aplicación nace en un hilo propio, no en un comando. Un
+`emit` desde ahí **devuelve `Ok` y no entrega nada**: el evento se pierde en
+silencio. Se ve enseguida porque los comandos síncronos de Tauri ya corren en el
+hilo principal, así que el mismo evento emitido desde un comando sí llegaba. La
+solución es `run_on_main_thread` **solo para emitir**; buscar el ejecutable y
+emparejar el perfil se quedan en el hilo trabajador.
 
 ## Seguridad
 

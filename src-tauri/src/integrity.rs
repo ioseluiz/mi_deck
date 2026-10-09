@@ -129,7 +129,15 @@ fn buscar_ciclos<'a>(
     negro.insert(nodo);
 }
 
-/// Superficies alcanzables desde la raiz, en anchura.
+/// Superficies alcanzables desde cualquier punto de entrada, en anchura.
+///
+/// Los puntos de entrada son la raiz **y la superficie de cada perfil**. Sembrar
+/// tambien desde los perfiles no es un detalle: un perfil no cuelga de la raiz
+/// por definicion, asi que sin esto saldria como huerfano y el boton "Borrar
+/// carpetas sin usar..." de Ajustes se llevaria todos los perfiles del usuario
+/// sin preguntar. Arreglandolo aqui se corrigen de golpe los tres sitios que
+/// consumen este informe: ese boton, el aviso del arranque y el contador de
+/// Ajustes.
 fn reachable<'a>(deck: &'a Deck, adj: &HashMap<&'a str, Vec<&'a str>>) -> HashSet<&'a str> {
     let mut vistos: HashSet<&str> = HashSet::new();
     let mut cola: VecDeque<&str> = VecDeque::new();
@@ -137,6 +145,13 @@ fn reachable<'a>(deck: &'a Deck, adj: &HashMap<&'a str, Vec<&'a str>>) -> HashSe
     if deck.surfaces.contains_key(&deck.root) {
         cola.push_back(deck.root.as_str());
         vistos.insert(deck.root.as_str());
+    }
+    for perfil in &deck.profiles {
+        // Tambien los deshabilitados: apagar un perfil no es tirar sus teclas.
+        let id = perfil.surface.as_str();
+        if deck.surfaces.contains_key(id) && vistos.insert(id) {
+            cola.push_back(id);
+        }
     }
 
     while let Some(actual) = cola.pop_front() {
@@ -186,6 +201,66 @@ mod tests {
     use crate::model::{DeckButton, Icon, Page, Settings, Surface};
     use std::collections::HashMap;
 
+    fn perfil(surface: &str) -> crate::perfiles::Profile {
+        crate::perfiles::Profile {
+            id: "p1".into(),
+            surface: surface.into(),
+            exes: vec!["excel.exe".into()],
+            enabled: true,
+        }
+    }
+
+    /// El test que mas protege de toda la fase.
+    ///
+    /// Un perfil no cuelga de la raiz por definicion. Si contara como huerfano,
+    /// el boton "Borrar carpetas sin usar..." de Ajustes se llevaria todos los
+    /// perfiles del usuario sin preguntar.
+    #[test]
+    fn la_superficie_de_un_perfil_no_es_huerfana() {
+        let mut deck = deck_con(&[], &["s-root", "s-excel"]);
+        deck.profiles = vec![perfil("s-excel")];
+
+        let r = check(&deck);
+        assert!(
+            r.orphans.is_empty(),
+            "el perfil salio como huerfano: {:?}",
+            r.orphans
+        );
+    }
+
+    #[test]
+    fn purgar_huerfanas_no_se_lleva_los_perfiles() {
+        let mut deck = deck_con(&[], &["s-root", "s-excel", "s-suelta"]);
+        deck.profiles = vec![perfil("s-excel")];
+
+        let borradas = crate::edit::purge_orphans(&mut deck);
+
+        assert_eq!(borradas, vec!["s-suelta"], "deberia borrar solo la suelta");
+        assert!(deck.surfaces.contains_key("s-excel"), "borro el perfil");
+        assert!(deck.surfaces.contains_key("s-root"));
+    }
+
+    /// Las carpetas que cuelgan de un perfil tampoco: el perfil es un punto de
+    /// entrada completo, con su arbol detras.
+    #[test]
+    fn lo_que_cuelga_de_un_perfil_tampoco_es_huerfano() {
+        let mut deck = deck_con(&[("s-excel", "s-sub")], &["s-root", "s-excel", "s-sub"]);
+        deck.profiles = vec![perfil("s-excel")];
+
+        assert!(check(&deck).orphans.is_empty());
+    }
+
+    #[test]
+    fn un_perfil_que_apunta_a_una_superficie_que_ya_no_existe_no_rompe_nada() {
+        let mut deck = deck_con(&[], &["s-root"]);
+        deck.profiles = vec![perfil("s-borrada")];
+
+        // No debe entrar en panico ni inventarse superficies.
+        let r = check(&deck);
+        assert!(r.orphans.is_empty());
+        assert!(r.broken.is_empty());
+    }
+
     /// Construye un deck a partir de aristas (superficie -> superficie).
     fn deck_con(aristas: &[(&str, &str)], superficies: &[&str]) -> Deck {
         let mut surfaces: HashMap<String, Surface> = HashMap::new();
@@ -211,6 +286,8 @@ mod tests {
             version: 1,
             settings: Settings::default(),
             root: "s-root".to_string(),
+            profiles: Vec::new(),
+            extra: serde_json::Map::new(),
             surfaces,
         }
     }

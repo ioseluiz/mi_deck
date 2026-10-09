@@ -32,6 +32,7 @@ const $toast = /** @type {HTMLElement} */ (document.getElementById("toast"));
 const $repo = /** @type {HTMLButtonElement} */ (document.getElementById("btn-repo"));
 const $lock = /** @type {HTMLButtonElement} */ (document.getElementById("btn-lock"));
 const $menu = /** @type {HTMLButtonElement} */ (document.getElementById("btn-menu"));
+const $perfil = /** @type {HTMLButtonElement} */ (document.getElementById("btn-perfil"));
 const $titlebar = /** @type {HTMLElement} */ (document.getElementById("titlebar"));
 const $panel = /** @type {HTMLElement} */ (document.getElementById("panel"));
 const $pie = /** @type {HTMLElement} */ (document.getElementById("pie"));
@@ -61,8 +62,19 @@ function desarmar(repintar = true) {
 }
 /** Nivel de ventana vigente: "normal" | "top" | "desktop". */
 let nivelActual = "top";
-/** Ejecutable de la aplicacion que el usuario tiene delante, segun Rust. */
-let appEnPrimerPlano = null;
+/**
+ * Perfil activo segun Rust: `{ exe, surface, nombre }`. `surface` en null
+ * significa que ninguna aplicacion configurada esta delante.
+ */
+let perfilActivo = { exe: null, surface: null, nombre: null };
+
+/**
+ * Con el ancla puesta, el panel deja de seguir a la aplicacion en primer plano.
+ *
+ * Es estado de sesion y no se guarda: un ancla que sobrevive al reinicio deja a
+ * alguien atrapado en un perfil sin saber por que.
+ */
+let perfilFijado = false;
 /** id de boton -> URL de su imagen, ya lista para un <img>. */
 let urls = {};
 let temporizadorToast = 0;
@@ -108,6 +120,59 @@ function pintar(direccion = null) {
     void $grid.offsetWidth;
     $grid.classList.add(clase);
   }
+}
+
+/**
+ * Aplica el perfil que Rust acaba de resolver.
+ *
+ * @param {{exe?: string, surface?: string|null, nombre?: string|null}} payload
+ */
+function aplicarPerfil(payload) {
+  perfilActivo = {
+    exe: payload?.exe ?? null,
+    surface: payload?.surface ?? null,
+    nombre: payload?.nombre ?? null,
+  };
+  pintarAncla();
+
+  // Con el ancla puesta el panel deja de seguir a la aplicacion, pero el perfil
+  // activo se sigue sabiendo: al soltarla se va al que toque sin esperar a que
+  // cambies de ventana.
+  if (perfilFijado || !nav) return;
+
+  const destino = perfilActivo.surface ?? nav.deck.root;
+  if (nav.setBase(destino)) pintar();
+}
+
+/** El ancla solo existe cuando hay perfil, y su estado se lee de un vistazo. */
+function pintarAncla() {
+  const hay = Boolean(perfilActivo.surface);
+  $perfil.hidden = !hay;
+  if (!hay) {
+    // Sin perfil no hay nada que fijar: soltarla evita quedarse anclado a nada.
+    perfilFijado = false;
+    return;
+  }
+  $perfil.setAttribute("aria-pressed", String(perfilFijado));
+  $perfil.title = perfilFijado
+    ? `Perfil «${perfilActivo.nombre}» fijado (clic para soltarlo)`
+    : `Perfil «${perfilActivo.nombre}» (clic para fijarlo y que no cambie solo)`;
+}
+
+/** Conmuta el ancla y vuelve al perfil que toque si se acaba de soltar. */
+function alternarAncla() {
+  perfilFijado = !perfilFijado;
+  pintarAncla();
+  if (!perfilFijado && nav) {
+    const destino = perfilActivo.surface ?? nav.deck.root;
+    if (nav.setBase(destino)) pintar();
+  }
+  aviso(
+    perfilFijado
+      ? "Perfil fijado: el panel ya no cambiará al pasar de aplicación."
+      : "Perfil suelto: el panel vuelve a seguir a la aplicación.",
+    "info"
+  );
 }
 
 function aplicarAjustes(settings) {
@@ -324,6 +389,8 @@ function conectarEventos() {
   // Ajustes y edicion estaban solo en el clic derecho sobre una celda vacia, asi
   // que con la rejilla llena no habia forma de llegar: un usuario lo reporto. El
   // boton de la barra de titulo da una via que no depende de que sobre un hueco.
+  $perfil.addEventListener("click", alternarAncla);
+
   $menu.addEventListener("click", (ev) => {
     ev.stopPropagation();
     if (menuAbierto()) {
@@ -350,6 +417,12 @@ function conectarEventos() {
         label: "Quitar esta página",
         desactivado: (nav?.pageCount ?? 1) <= 1,
         accion: () => quitarPagina(),
+      },
+      { separador: true },
+      {
+        label: perfilFijado ? "Soltar el perfil" : "Fijar este perfil",
+        desactivado: !perfilActivo.surface,
+        accion: () => alternarAncla(),
       },
       { separador: true },
       { label: "Ajustes…", accion: () => abrirEditor("ajustes", null, 0) },
@@ -608,16 +681,10 @@ function conectarEdicion() {
     .catch((e) => console.warn("[MiDeck] no se pudo escuchar deck-changed:", e));
 
   // Rust avisa cuando la aplicacion en primer plano cambia de verdad, ya
-  // amortiguada. De momento solo se registra; en la fase siguiente es lo que
-  // hara cambiar de perfil.
+  // amortiguada, y con el perfil ya resuelto.
   ventana()
-    .listen("app-en-primer-plano", (ev) => {
-      appEnPrimerPlano = ev?.payload?.exe ?? null;
-      console.log("[MiDeck] primer plano:", appEnPrimerPlano);
-    })
-    .catch((e) =>
-      console.warn("[MiDeck] no se pudo escuchar app-en-primer-plano:", e)
-    );
+    .listen("perfil-activo", (ev) => aplicarPerfil(ev?.payload))
+    .catch((e) => console.warn("[MiDeck] no se pudo escuchar perfil-activo:", e));
 
   conectarSoltarArchivos(contextoActual, aviso, refrescar).catch((e) =>
     console.warn("[MiDeck] arrastre de archivos no disponible:", e)

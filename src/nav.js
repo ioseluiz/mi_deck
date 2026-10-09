@@ -4,26 +4,54 @@
  *
  * Entrar a una carpeta apila, volver desapila. La pagina se reinicia al cambiar
  * de superficie: entrar a una carpeta y aparecer en su pagina 3 desorienta.
+ *
+ * El fondo de la pila no es siempre la raiz: con un perfil de aplicacion activo
+ * es la superficie de ese perfil. Esa es toda la diferencia entre tener perfiles
+ * y no tenerlos, por eso vive aqui y no repartida por el resto del panel.
  */
 
 export class Nav {
   /** @param {any} deck */
   constructor(deck) {
     this.deck = deck;
+    /** Superficie de la que cuelga todo: la raiz, o el perfil activo. */
+    this.base = deck.root;
     /** @type {string[]} */
-    this.stack = [deck.root];
+    this.stack = [this.base];
     this.page = 0;
+  }
+
+  /**
+   * Cambia la superficie base y vuelve a ella, descartando la navegacion.
+   *
+   * Se descarta a proposito: al cambiar de aplicacion, lo que estuvieras mirando
+   * dentro de una carpeta del perfil anterior ya no viene a cuento.
+   *
+   * @param {string} surfaceId
+   * @returns {boolean} si hubo cambio
+   */
+  setBase(surfaceId) {
+    const destino = this.deck.surfaces[surfaceId] ? surfaceId : this.deck.root;
+    if (destino === this.base && this.stack.length === 1) return false;
+    this.base = destino;
+    this.stack = [destino];
+    this.page = 0;
+    return true;
   }
 
   /** @param {any} deck */
   setDeck(deck) {
     this.deck = deck;
+    // La base pudo desaparecer: borrar el perfil, o su superficie.
+    if (!deck.surfaces[this.base]) {
+      this.base = deck.root;
+    }
     // Si la superficie actual desaparecio del deck, replegar hasta una valida.
     while (this.stack.length > 1 && !deck.surfaces[this.surfaceId]) {
       this.stack.pop();
     }
     if (!deck.surfaces[this.surfaceId]) {
-      this.stack = [deck.root];
+      this.stack = [this.base];
     }
     this.page = Math.min(this.page, this.pageCount - 1);
   }

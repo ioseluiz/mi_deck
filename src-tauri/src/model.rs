@@ -49,6 +49,22 @@ pub struct Deck {
     /// Id de la superficie raiz.
     pub root: String,
     pub surfaces: HashMap<String, Surface>,
+    /// Perfiles por aplicacion, en orden. Gana el primero que empareje.
+    ///
+    /// Viven aqui y no en `Settings` por dos motivos concretos: `update_settings`
+    /// reemplaza los ajustes enteros con lo que mande el frontend, asi que un
+    /// descuido en el editor borraria todos los perfiles; y un perfil referencia
+    /// superficies, que es contenido del deck y no una preferencia de ventana.
+    #[serde(default)]
+    pub profiles: Vec<crate::perfiles::Profile>,
+    /// Lo que esta version no conoce, conservado tal cual.
+    ///
+    /// Sin esto, abrir con una version anterior un archivo escrito por una mas
+    /// nueva perderia silenciosamente lo que la anterior no entiende: serde lo
+    /// ignora al leer y no lo escribe al guardar. Es la misma red que ya tiene
+    /// `Action::Unknown`, pero para el deck entero.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 // ---------------------------------------------------------------- ajustes
@@ -86,6 +102,9 @@ pub struct Settings {
     pub screenshot_to_clipboard: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowPos>,
+    /// Ajustes que esta version no conoce. Ver `Deck::extra`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Settings {
@@ -104,6 +123,7 @@ impl Default for Settings {
             // correo o en un ticket, no para dejarla en una carpeta.
             screenshot_to_clipboard: true,
             window: None,
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -449,6 +469,62 @@ mod tests_tolerancia {
     fn una_accion_que_ni_siquiera_es_un_objeto_no_tumba_nada() {
         let b = leer(r#""una cadena suelta""#);
         assert_eq!(b.action.kind(), "unknown");
+    }
+
+    // ------------------------------------- campos del deck que no se conocen
+
+    fn deck_minimo(extra_deck: &str, extra_ajustes: &str) -> String {
+        format!(
+            r#"{{"version":1,"root":"r","surfaces":{{"r":{{"name":"Raiz","pages":[]}}}},
+               "settings":{{"key_size":96{extra_ajustes}}}{extra_deck}}}"#
+        )
+    }
+
+    /// La otra mitad de la red de seguridad. `Action::Unknown` protege una tecla
+    /// suelta; esto protege lo que una version futura anada al deck o a los
+    /// ajustes. Sin ello, abrir el archivo con una version anterior lo perderia
+    /// en silencio al primer guardado.
+    #[test]
+    fn lo_que_el_deck_no_conoce_sobrevive_a_guardar() {
+        let json = deck_minimo(
+            r#","futuro_del_deck":{"algo":1},"otra_cosa":[1,2]"#,
+            r#","futuro_de_ajustes":"x""#,
+        );
+        let deck: Deck = serde_json::from_str(&json).expect("deberia leerse");
+
+        let guardado = serde_json::to_string(&deck).unwrap();
+        let valor: serde_json::Value = serde_json::from_str(&guardado).unwrap();
+
+        assert_eq!(valor["futuro_del_deck"]["algo"], 1);
+        assert_eq!(valor["otra_cosa"], serde_json::json!([1, 2]));
+        assert_eq!(valor["settings"]["futuro_de_ajustes"], "x");
+        // Y lo conocido sigue en su sitio.
+        assert_eq!(valor["root"], "r");
+        assert_eq!(valor["settings"]["key_size"], 96);
+    }
+
+    #[test]
+    fn un_deck_sin_campos_raros_no_gana_ninguno() {
+        let deck: Deck = serde_json::from_str(&deck_minimo("", "")).unwrap();
+        assert!(deck.extra.is_empty());
+        assert!(deck.settings.extra.is_empty());
+        assert!(deck.profiles.is_empty());
+    }
+
+    #[test]
+    fn los_perfiles_se_leen_y_se_vuelven_a_escribir() {
+        let json = deck_minimo(
+            r#","profiles":[{"id":"p1","surface":"s-excel","exes":["excel.exe"]}]"#,
+            "",
+        );
+        let deck: Deck = serde_json::from_str(&json).unwrap();
+        assert_eq!(deck.profiles.len(), 1);
+        // `enabled` no venia en el archivo y tiene que llegar en true.
+        assert!(deck.profiles[0].enabled);
+
+        let valor: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&deck).unwrap()).unwrap();
+        assert_eq!(valor["profiles"][0]["surface"], "s-excel");
     }
 }
 

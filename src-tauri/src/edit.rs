@@ -70,11 +70,21 @@ fn localizar(deck: &Deck, button_id: &str) -> Option<(String, usize, usize)> {
     None
 }
 
+/// Si la celda 0 de esa superficie esta reservada a la tecla de volver.
+///
+/// Lo esta en toda superficie que no sea un nivel superior. Son niveles
+/// superiores la raiz y las superficies de los perfiles: a un perfil no se llega
+/// entrando desde ningun sitio, asi que no hay nada a lo que volver y bloquearle
+/// la celda 0 solo dejaria un hueco inutilizable.
+fn celda_cero_reservada(deck: &Deck, surface_id: &str) -> bool {
+    !crate::perfiles::es_base(&deck.root, &deck.profiles, surface_id)
+}
+
 /// Primera celda libre de una pagina, respetando la celda 0 reservada a la tecla
-/// de volver en toda superficie que no sea la raiz.
+/// de volver.
 fn primera_libre(deck: &Deck, surface_id: &str, pagina: usize) -> Option<u32> {
     let total = celdas(deck);
-    let reservada = surface_id != deck.root;
+    let reservada = celda_cero_reservada(deck, surface_id);
     let ocupadas: Vec<u32> = deck
         .surfaces
         .get(surface_id)
@@ -157,7 +167,7 @@ pub fn upsert_button(
     // Normalizar la celda pedida: fuera de rango, o la celda 0 de una subcarpeta
     // (reservada a la tecla de volver), caen al primer hueco libre.
     let total = celdas(deck);
-    let reservada = surface_id != deck.root;
+    let reservada = celda_cero_reservada(deck, surface_id);
     if boton.position >= total || (reservada && boton.position == 0) {
         match primera_libre(deck, surface_id, pagina) {
             Some(p) => boton.position = p,
@@ -371,6 +381,48 @@ mod tests {
 
     fn contar(deck: &Deck, sid: &str, pagina: usize) -> usize {
         deck.surfaces[sid].pages[pagina].buttons.len()
+    }
+
+    // ------------------------------------------- la celda 0 de un perfil
+
+    /// Un perfil se muestra como nivel superior, sin tecla de volver. Si el
+    /// backend le reservara la celda 0 como a una carpeta, esa celda quedaria
+    /// visualmente vacia e imposible de usar.
+    #[test]
+    fn la_celda_cero_de_un_perfil_se_puede_usar() {
+        let mut deck = default_deck();
+        deck.surfaces
+            .insert("s-excel".into(), crate::model::Surface::new("Excel"));
+        deck.profiles = vec![crate::perfiles::Profile {
+            id: "p1".into(),
+            surface: "s-excel".into(),
+            exes: vec!["excel.exe".into()],
+            enabled: true,
+        }];
+
+        upsert_button(&mut deck, "s-excel", 0, boton("b-nuevo", 0)).unwrap();
+
+        let puesto = &deck.surfaces["s-excel"].pages[0].buttons[0];
+        assert_eq!(puesto.position, 0, "la celda 0 del perfil quedo reservada");
+    }
+
+    /// Y lo contrario: una carpeta corriente sigue reservandola.
+    #[test]
+    fn la_celda_cero_de_una_carpeta_sigue_reservada() {
+        let mut deck = default_deck();
+        let raiz = deck.root.clone();
+        create_folder(&mut deck, &raiz, 0, 1, "Carpeta").unwrap();
+        let sid = deck
+            .surfaces
+            .iter()
+            .find(|(_, s)| s.name == "Carpeta")
+            .map(|(k, _)| k.clone())
+            .expect("la carpeta deberia existir");
+
+        upsert_button(&mut deck, &sid, 0, boton("b-nuevo", 0)).unwrap();
+
+        let puesto = &deck.surfaces[&sid].pages[0].buttons[0];
+        assert_ne!(puesto.position, 0, "piso la tecla de volver");
     }
 
     #[test]

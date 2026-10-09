@@ -264,6 +264,8 @@ pub fn default_deck() -> Deck {
         settings: Settings::default(),
         root: ROOT_ID.to_string(),
         surfaces,
+        profiles: Vec::new(),
+        extra: serde_json::Map::new(),
     }
 }
 

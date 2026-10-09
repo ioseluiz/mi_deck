@@ -192,6 +192,14 @@ fn arrancar_trabajador(avisar: impl Fn(String) + Send + 'static) {
     std::thread::spawn(move || {
         let mut ultimo: Option<String> = None;
 
+        // Siembra inicial: si MiDeck arranca mientras tienes Excel delante, el
+        // perfil de Excel tiene que estar puesto ya. Sin esto habria que salir de
+        // la aplicacion y volver para que el gancho se enterara.
+        if let Some(ruta) = ejecutable_actual() {
+            ultimo = Some(ruta.clone());
+            avisar(ruta);
+        }
+
         while let Ok(primero) = receptor.recv() {
             // Quedarse con el ultimo de la racha.
             let mut id = primero;
@@ -403,6 +411,22 @@ unsafe fn ejecutable_de_ventana(hwnd: windows::Win32::Foundation::HWND) -> Optio
     }
     let ruta = String::from_utf16_lossy(&buffer[..largo as usize]);
     Some(normalizar(Path::new(&ruta)))
+}
+
+/// Ejecutable de la ventana que esta en primer plano ahora mismo.
+///
+/// Solo para la siembra inicial. Devuelve `None` si la ventana de delante es
+/// nuestra, que al arrancar es lo normal: un perfil para MiDeck no existe.
+#[cfg(windows)]
+fn ejecutable_actual() -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_invalid() {
+        return None;
+    }
+    let ruta = ejecutable_de(hwnd)?;
+    (nombre_de_ejecutable(&ruta) != exe_propio()).then_some(ruta)
 }
 
 /// Ruta del ejecutable de una ventana, ya normalizada.

@@ -139,6 +139,13 @@ body {
   fill: currentColor;
 }
 
+/* `display: grid` gana a la regla que el navegador aplica a [hidden], asi que sin
+   esto el boton se ve siempre. El mismo descuido ya dejo el paginador visible con
+   una sola pagina. */
+.win-btn[hidden] {
+  display: none;
+}
+
 .win-btn:hover {
   background: rgba(255, 255, 255, 0.09);
   color: var(--texto);

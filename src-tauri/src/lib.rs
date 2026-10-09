@@ -14,6 +14,7 @@ pub mod integrity;
 pub mod launcher;
 pub mod model;
 pub mod nivel;
+pub mod perfiles;
 pub mod screen;
 pub mod sistema;
 pub mod store;
@@ -905,11 +906,31 @@ fn list_installed_apps() -> Vec<apps::AppInstalada> {
 
 /// Lo que se le manda al panel cuando cambia la aplicacion en primer plano.
 ///
-/// De momento solo viaja el ejecutable. En la fase siguiente llevara ademas el
-/// perfil que le corresponde, que decide Rust y no el frontend.
+/// Quien decide el perfil es Rust y no el frontend: la funcion de emparejamiento
+/// es pura y esta cubierta por tests, y los perfiles viven en el deck. El
+/// ejecutable viaja igualmente, porque es lo util para diagnosticar por que un
+/// perfil no se activa.
 #[derive(Clone, Serialize)]
-struct AppEnPrimerPlano {
+struct PerfilActivo {
     exe: String,
+    /// Superficie a mostrar. `None` = ningun perfil cubre esta aplicacion.
+    surface: Option<String>,
+    /// Su nombre, para ensenarlo en el panel.
+    nombre: Option<String>,
+}
+
+/// Perfil que corresponde a un ejecutable, con la superficie ya comprobada.
+///
+/// Un perfil que apunta a una superficie borrada no se informa: mandar el panel a
+/// una superficie que no existe solo produciria una rejilla en blanco.
+fn perfil_activo_de(deck: &Deck, exe: &str) -> (Option<String>, Option<String>) {
+    match perfiles::perfil_para(&deck.profiles, exe) {
+        Some(p) => match deck.surfaces.get(&p.surface) {
+            Some(s) => (Some(p.surface.clone()), Some(s.name.clone())),
+            None => (None, None),
+        },
+        None => (None, None),
+    }
 }
 
 /// Aplicaciones con ventana visible ahora mismo.
@@ -1259,11 +1280,31 @@ pub fn run() {
                 let mango = app.handle().clone();
                 focus::vigilar_primer_plano(move |ruta| {
                     let exe = focus::nombre_de_ejecutable(&ruta);
+                    let (surface, nombre) = {
+                        let estado = mango.state::<AppState>();
+                        let deck = estado.deck.lock().unwrap();
+                        perfil_activo_de(&deck, &exe)
+                    };
                     // Solo en compilacion de desarrollo: en produccion seria una linea
                     // por cada Alt+Tab del dia.
                     #[cfg(debug_assertions)]
-                    eprintln!("[MiDeck] primer plano: {exe}");
-                    let _ = mango.emit("app-en-primer-plano", AppEnPrimerPlano { exe });
+                    eprintln!("[MiDeck] primer plano: {exe} -> perfil {nombre:?}");
+                    let aviso = PerfilActivo {
+                        exe,
+                        surface,
+                        nombre,
+                    };
+
+                    // El salto al hilo principal no es ceremonia: un `emit` desde
+                    // un hilo propio devuelve Ok y **no entrega nada**. Se ve
+                    // enseguida porque los comandos sincronos de Tauri ya corren
+                    // en el principal, asi que el mismo evento emitido desde un
+                    // comando si llegaba. Solo salta el aviso; buscar el
+                    // ejecutable y emparejar el perfil se queda en el trabajador.
+                    let emisor = mango.clone();
+                    let _ = mango.run_on_main_thread(move || {
+                        let _ = emisor.emit("perfil-activo", aviso);
+                    });
                 });
             }
             registrar_atajo(app.handle(), atajo.as_deref());
