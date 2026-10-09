@@ -405,6 +405,7 @@ fn tam_ventana(window: &tauri::Window) -> (u32, u32) {
 /// no quede visible en algun monitor.
 #[tauri::command]
 fn save_window_pos(
+    app: AppHandle,
     x: i32,
     y: i32,
     window: tauri::Window,
@@ -414,9 +415,21 @@ fn save_window_pos(
     if !screen::es_alcanzable(pos, tam_ventana(&window), &monitores(&window)) {
         return Ok(());
     }
-    let mut deck = state.deck.lock().unwrap();
-    deck.settings.window = Some(pos);
-    store::save(&deck, &state.config_path).map_err(|e| e.to_string())
+    let esquina = {
+        let mut deck = state.deck.lock().unwrap();
+        deck.settings.window = Some(pos);
+        store::save(&deck, &state.config_path).map_err(|e| e.to_string())?;
+        deck.settings.bubble.then_some(deck.settings.bubble_corner)
+    };
+
+    // Si el panel se ha ido a otra pantalla, la burbuja va detras: dejarla en el
+    // monitor de antes es la misma queja de "la enciendo y no la veo", solo que
+    // ahora por haber movido el panel. No crea nada, solo la recoloca, asi que
+    // vale un comando sincrono.
+    if let Some(esquina) = esquina {
+        let _ = burbuja::colocar(&app, esquina);
+    }
+    Ok(())
 }
 
 /// Cambia donde vive el panel: normal, encima de todo, o al nivel del escritorio.

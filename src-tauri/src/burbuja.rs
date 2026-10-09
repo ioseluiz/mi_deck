@@ -44,6 +44,34 @@ pub fn posicion(
     }
 }
 
+/// Area de trabajo del monitor donde esta una ventana.
+///
+/// Con varias pantallas, `SPI_GETWORKAREA` solo sabe de la principal, asi que la
+/// burbuja solo podia aparecer ahi: quien tuviera el panel en el segundo monitor
+/// la encendia y no la encontraba, porque estaba en la otra pantalla. Asi va a
+/// la del panel, que es donde se la busca.
+#[cfg(windows)]
+pub fn area_del_monitor_de(hwnd: windows::Win32::Foundation::HWND) -> (i32, i32, i32, i32) {
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: core::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            // Una ventana sin monitor valido no deberia pasar, pero si pasa es
+            // mejor la pantalla principal que una esquina inventada.
+            return area_de_trabajo();
+        }
+        let r = info.rcWork;
+        (r.left, r.top, r.right, r.bottom)
+    }
+}
+
 /// El area de trabajo del escritorio: la pantalla menos la barra de tareas.
 #[cfg(windows)]
 pub fn area_de_trabajo() -> (i32, i32, i32, i32) {
@@ -99,7 +127,7 @@ pub fn colocar(app: &AppHandle, esquina: BubbleCorner) -> Result<(), String> {
     let Some(ventana) = app.get_webview_window(ETIQUETA) else {
         return Ok(());
     };
-    let (x, y) = posicion(esquina, area_de_trabajo(), LADO, MARGEN);
+    let (x, y) = posicion(esquina, area_para(app), LADO, MARGEN);
 
     #[cfg(windows)]
     if let Ok(mango) = ventana.hwnd() {
@@ -124,13 +152,26 @@ pub fn visible(app: &AppHandle, mostrar: bool) {
     };
 }
 
+/// Area de trabajo donde colocar la burbuja: la del monitor del panel.
+fn area_para(app: &AppHandle) -> (i32, i32, i32, i32) {
+    #[cfg(windows)]
+    if let Some(panel) = app.get_webview_window("main") {
+        if let Ok(mango) = panel.hwnd() {
+            return area_del_monitor_de(windows::Win32::Foundation::HWND(mango.0));
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+    area_de_trabajo()
+}
+
 /// Crea la ventana de la burbuja si no existe.
 pub fn crear(app: &AppHandle, esquina: BubbleCorner) -> Result<(), String> {
     if app.get_webview_window(ETIQUETA).is_some() {
         return Ok(());
     }
 
-    let (x, y) = posicion(esquina, area_de_trabajo(), LADO, MARGEN);
+    let (x, y) = posicion(esquina, area_para(app), LADO, MARGEN);
 
     let ventana = WebviewWindowBuilder::new(app, ETIQUETA, WebviewUrl::App("burbuja.html".into()))
         .title("MiDeck")
