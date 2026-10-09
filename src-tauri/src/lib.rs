@@ -22,6 +22,7 @@ pub mod screen;
 pub mod sistema;
 pub mod store;
 pub mod teclas;
+pub mod vivo;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -62,6 +63,12 @@ pub struct DeckView {
     /// id de boton -> ruta absoluta de su imagen. El frontend la convierte a URL
     /// con convertFileSrc. Solo trae los botones que tienen imagen resoluble.
     icon_paths: HashMap<String, String>,
+    /// id de boton -> lo que ensena ahora mismo, para las teclas con fuente.
+    ///
+    /// Hermano de `icon_paths`: un mapa aparte y no un campo dentro de la tecla,
+    /// porque no es configuracion sino estado de este instante. En `deck.json` no
+    /// pinta nada.
+    live: HashMap<String, vivo::Valor>,
     /// Botones que exigen pulsar dos veces antes de ejecutarse.
     ///
     /// Quien decide que es peligroso es el catalogo de Rust, no el frontend: asi
@@ -133,6 +140,73 @@ fn destino_para_icono(action: &Action) -> Option<PathBuf> {
 ///
 /// Se hace en el backend, de una vez, en vez de una invocacion por tecla: son
 /// quince teclas y todo queda cacheado tras el primer arranque.
+/// Lo que ensenan ahora mismo las teclas con fuente.
+///
+/// Se lee de Windows una sola vez por llamada aunque veinte teclas pidan lo
+/// mismo: `vivo::leer` recoge de golpe solo lo que alguien pide.
+/// Late una vez por segundo y avisa al panel de lo que haya cambiado.
+///
+/// Tres frenos, porque es el primer trabajo recurrente de MiDeck y en un portatil
+/// se notaria:
+///   - Si ninguna tecla declara fuente, no se pregunta nada a Windows.
+///   - Si el panel no esta visible, no hay a quien avisar.
+///   - Si nada cambio desde el latido anterior, no se emite.
+///
+/// El aviso va dentro de `run_on_main_thread` sin excepcion: un `emit` desde un
+/// hilo propio devuelve Ok y no entrega nada.
+fn vigilar_estado_vivo(app: AppHandle) {
+    let mut ultimo: HashMap<String, vivo::Valor> = HashMap::new();
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let visible = app
+            .get_webview_window("main")
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(false);
+        if !visible {
+            continue;
+        }
+
+        let ahora = {
+            let estado = app.state::<AppState>();
+            let deck = estado.deck.lock().unwrap();
+            estado_vivo(&deck)
+        };
+        if ahora == ultimo {
+            continue;
+        }
+        ultimo = ahora.clone();
+
+        let emisor = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let _ = emisor.emit("estado-vivo", ahora);
+        });
+    }
+}
+
+fn estado_vivo(deck: &Deck) -> HashMap<String, vivo::Valor> {
+    let con_fuente: Vec<(&str, &vivo::Fuente)> = deck
+        .surfaces
+        .values()
+        .flat_map(|s| s.pages.iter())
+        .flat_map(|p| p.buttons.iter())
+        .filter_map(|b| b.live.as_ref().map(|f| (b.id.as_str(), f)))
+        .collect();
+
+    if con_fuente.is_empty() {
+        return HashMap::new();
+    }
+    let mut fuentes: Vec<vivo::Fuente> = con_fuente.iter().map(|(_, f)| (*f).clone()).collect();
+    fuentes.dedup();
+
+    let lecturas = vivo::leer(&fuentes);
+    con_fuente
+        .into_iter()
+        .map(|(id, f)| (id.to_string(), vivo::valor_de(f, &lecturas)))
+        .collect()
+}
+
 fn resolver_iconos(deck: &Deck) -> HashMap<String, String> {
     let mut mapa = HashMap::new();
 
@@ -168,6 +242,7 @@ fn get_deck(state: State<AppState>) -> DeckView {
         integrity: integrity::check(&deck),
         icon_paths: resolver_iconos(&deck),
         confirm_required: botones_a_confirmar(&deck),
+        live: estado_vivo(&deck),
         deck: deck.clone(),
         warnings: state.warnings.lock().unwrap().clone(),
         config_path: state.config_path.display().to_string(),
@@ -567,6 +642,7 @@ fn guardar_y_devolver(state: &State<AppState>) -> Result<DeckView, String> {
         integrity: integrity::check(&deck),
         icon_paths: resolver_iconos(&deck),
         confirm_required: botones_a_confirmar(&deck),
+        live: estado_vivo(&deck),
         deck: deck.clone(),
         warnings: Vec::new(),
         config_path: state.config_path.display().to_string(),
@@ -1060,6 +1136,7 @@ fn drop_paths(
                 icon: images::icono_para(p),
                 action,
                 wheel: None,
+                live: None,
                 extra: Default::default(),
             };
             edit::upsert_button(deck, &surface_id, page, boton)?;
@@ -1095,6 +1172,7 @@ fn drop_url(
                 profile: None,
             },
             wheel: None,
+            live: None,
             extra: Default::default(),
         };
         edit::upsert_button(deck, &surface_id, page, boton)
@@ -1684,6 +1762,14 @@ pub fn run() {
                     });
                 });
             }
+            // El latido del estado vivo. Un hilo propio y no un temporizador del
+            // frontend: el trabajo caro --enumerar procesos, preguntar por el
+            // disco-- se queda en Rust, y asi el panel solo recibe lo que cambio.
+            {
+                let mango = app.handle().clone();
+                std::thread::spawn(move || vigilar_estado_vivo(mango));
+            }
+
             registrar_atajo(app.handle(), atajo.as_deref());
 
             if let Err(e) = burbuja::aplicar(app.handle(), burbuja_on, burbuja_esquina) {

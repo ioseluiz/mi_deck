@@ -281,6 +281,7 @@ mod tests {
                     surface: to.to_string(),
                 },
                 wheel: None,
+                live: None,
                 extra: Default::default(),
             });
         }

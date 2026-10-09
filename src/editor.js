@@ -336,6 +336,37 @@ function pintarRueda() {
     .join("");
 }
 
+/** La fuente elegida en el formulario, o null. */
+function fuenteAModelo() {
+  const tipo = $("ed-live").value;
+  if (!tipo) return null;
+  if (tipo === "app_abierta") {
+    const exe = $("ed-live-exe").value.trim();
+    return exe ? { type: "app_abierta", exe } : null;
+  }
+  if (tipo === "disco_libre") {
+    const unidad = $("ed-live-unidad").value.trim();
+    return unidad ? { type: "disco_libre", unidad } : null;
+  }
+  return { type: tipo };
+}
+
+/** Rellena el bloque de la fuente desde la tecla. */
+function volcarFuente(live) {
+  const tipo = live?.type ?? "";
+  $("ed-live").value = tipo;
+  $("ed-live-exe").value = live?.exe ?? "";
+  $("ed-live-unidad").value = live?.unidad ?? "";
+  mostrarCamposDeFuente();
+}
+
+/** Solo se ensena el campo que la fuente elegida necesita. */
+function mostrarCamposDeFuente() {
+  const tipo = $("ed-live").value;
+  $("ed-live-exe-campo").hidden = tipo !== "app_abierta";
+  $("ed-live-unidad-campo").hidden = tipo !== "disco_libre";
+}
+
 /** Lo que espera Rust, o null si la tecla no tiene rueda. */
 function ruedaAModelo() {
   if (!RUEDA) return null;
@@ -530,6 +561,8 @@ function volcarEnFormulario() {
   RUEDA = ruedaDesdeModelo(tecla.wheel);
   pintarRueda();
 
+  volcarFuente(tecla.live);
+
   if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
   mostrarAvisoSistema();
   prepararDesconocida(tipo, a);
@@ -645,6 +678,10 @@ function leerFormulario() {
   const rueda = ruedaAModelo();
   if (rueda) tecla.wheel = rueda;
   else delete tecla.wheel;
+
+  const fuente = fuenteAModelo();
+  if (fuente) tecla.live = fuente;
+  else delete tecla.live;
 }
 
 /**
@@ -1108,6 +1145,18 @@ function conectar() {
     refrescarIconoAuto();
     pintarPrevia();
   });
+
+  $("ed-live").addEventListener("change", () => {
+    mostrarCamposDeFuente();
+    // Una unidad por defecto, que es la que tiene todo el mundo.
+    if ($("ed-live").value === "disco_libre" && !$("ed-live-unidad").value) {
+      $("ed-live-unidad").value = "C:";
+    }
+    leerFormulario();
+  });
+  for (const id of ["ed-live-exe", "ed-live-unidad"]) {
+    $(id).addEventListener("input", () => leerFormulario());
+  }
 
   $("ed-rueda-on").addEventListener("change", (ev) => {
     RUEDA = ev.target.checked ? ruedaPorDefecto() : null;

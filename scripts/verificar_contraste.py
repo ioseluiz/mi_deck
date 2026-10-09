@@ -39,6 +39,12 @@ EXIGENCIAS = [
     # La marca de rueda en la esquina de una tecla: es un grafico de interfaz,
     # asi que 3:1 sobre la superficie de la tecla (WCAG 1.4.11).
     ("marca de rueda sobre la tecla", "--texto-tenue", "--tecla", 3.0),
+    # La pastilla de valor: su texto se lee sobre su propio fondo, y la pastilla
+    # se distingue de la tecla que la lleva debajo.
+    ("valor sobre su pastilla", "#cfd4da", "#1b1d22", 4.5),
+    ("pastilla de valor sobre la tecla", "#1b1d22", "--tecla", 1.8),
+    # La barra de una tecla apagada, que es lo que evita depender del tono solo.
+    ("barra de tecla apagada sobre la tecla", "--texto-tenue", "--tecla", 3.0),
     # El aviso de arranque roto: se lee sobre su propio fondo y su borde se ve
     # sobre el panel. Es lo unico que queda en pantalla cuando nada funciona.
     ("texto de arranque roto sobre su fondo", "#ffd9dc", "#2a1d1f", 4.5),

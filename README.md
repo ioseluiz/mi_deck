@@ -483,6 +483,58 @@ las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
 
+## Teclas que enseñan algo
+
+Una tecla puede mostrar información del sistema sin que la pulses: la hora, el
+espacio libre, si una aplicación está abierta. Es la diferencia de fondo con una
+consola de hardware, donde cada tecla es una pantallita.
+
+Se elige en el editor, en *Lo que la tecla enseña*:
+
+| Fuente | Qué pinta |
+|---|---|
+| La hora | `15:42` |
+| Bloq Mayús / Bloq Num | Apaga la tecla cuando está desactivado |
+| Si una aplicación está abierta | Apaga la tecla cuando no lo está |
+| Batería | `42%`, y apaga la tecla por debajo del 20 % |
+| Memoria usada | `41%` |
+| Espacio libre de una unidad | `552 GB` |
+
+El valor sale en una pastilla **sobre el icono**: las cuatro esquinas están
+pedidas —arriba a la derecha la esquina de carpeta, arriba a la izquierda la marca
+de rueda, y abajo la etiqueta ocupa todo el ancho—.
+
+Lo que es un sí o un no **apaga la tecla**: además de atenuarla le cruza una barra,
+porque el tono solo no vale para quien no lo distingue, y aquí la diferencia *es*
+la información.
+
+### El latido, y lo que cuesta
+
+Un hilo de Rust late una vez por segundo y manda al panel **solo lo que cambió**.
+Tres frenos, porque es el primer trabajo recurrente de MiDeck:
+
+- Si ninguna tecla declara fuente, no se le pregunta nada a Windows.
+- Si el panel no está visible, no hay a quien avisar.
+- Si nada cambió desde el latido anterior, no se emite.
+
+Medido aquí, con el panel visible durante 30 s: **16 ms de CPU** con una tecla de
+reloj, **0 ms** con una de disco, y **344 ms con una de aplicación abierta**.
+Enumerar todos los procesos del sistema es con diferencia lo más caro, y «¿está
+abierto Teams?» no necesita resolución de un segundo: la lista se reaprovecha
+**cuatro segundos**, y eso lo baja a 109 ms. Lo único que se pierde es que abrir o
+cerrar algo tarde hasta cuatro segundos en notarse.
+
+«Abierta» significa que **el proceso existe**, no que tenga ventana visible: Teams
+u Outlook minimizados a la bandeja saldrían como cerrados, que es justo cuando uno
+mira la tecla para saber si están.
+
+### Una fuente que esta versión no conozca
+
+Se envuelve y vuelve al disco intacta, igual que una acción desconocida. Sin eso,
+un `live` escrito por una versión más nueva no encajaría con el enum, **la tecla
+entera dejaría de leerse y con ella el deck completo**: se daría por corrupto, se
+respaldaría y se arrancaría de cero. Lo encontró un test al añadir el campo.
+
 ## Copiar, cortar y pegar una tecla
 
 Clic derecho en una tecla → **Copiar** o **Cortar**; clic derecho en una celda libre

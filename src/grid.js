@@ -266,6 +266,11 @@ export function render(contenedor, nav, ctx) {
     // Una rueda que no se ve no la usa nadie: la marca de la esquina es lo unico
     // que distingue una tecla que responde al giro de una que no.
     if (b.wheel) clases.push("key--rueda");
+
+    // Lo que la tecla ensena del sistema. `encendido: false` apaga la tecla
+    // entera, que es lo que distingue "el micro esta abierto" de "esta cortado".
+    const vivo = b.live ? ctx.vivo?.[b.id] : null;
+    if (vivo?.encendido === false) clases.push("key--apagada");
     if (icon.fit === "cover") clases.push("key--cover");
     if (icon.label_style === "overlay") clases.push("key--label-overlay");
     if (icon.label_style === "none") clases.push("key--label-none");
@@ -290,6 +295,8 @@ export function render(contenedor, nav, ctx) {
         `<span class="key-etiqueta">${
           armada ? "¿Seguro?" : escapar(b.label || "")
         }</span>` +
+        (vivo?.texto ? `<span class="key-valor">${escapar(vivo.texto)}</span>` : "") +
+        (vivo?.encendido === false ? `<span class="key-tachado"></span>` : "") +
         `</button>`
     );
   }

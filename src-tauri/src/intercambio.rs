@@ -269,6 +269,7 @@ mod tests {
             },
             action: accion,
             wheel: None,
+            live: None,
             extra: Default::default(),
         }
     }

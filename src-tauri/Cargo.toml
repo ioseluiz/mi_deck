@@ -60,6 +60,7 @@ features = [
   "Win32_System_Power",
   "Win32_System_Shutdown",
   "Win32_System_SystemInformation",
+  "Win32_System_Diagnostics_ToolHelp",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ]

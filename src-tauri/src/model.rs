@@ -219,6 +219,13 @@ pub struct DeckButton {
     /// pulsar nada. Vacio en casi todas las teclas, por eso no se serializa.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wheel: Option<Rueda>,
+    /// De donde saca esta tecla lo que ensena del sistema.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::vivo::fuente_tolerante"
+    )]
+    pub live: Option<crate::vivo::Fuente>,
     /// Lo que esta version no conoce de la tecla, conservado tal cual.
     ///
     /// `Deck` y `Settings` ya tenian esta red; la tecla era el unico sitio sin
@@ -500,7 +507,13 @@ mod tests_tolerancia {
         let vuelta = serde_json::to_value(&tecla).unwrap();
         assert!(vuelta.get("states").is_some(), "se perdio `states`");
         assert!(vuelta.get("live").is_some(), "se perdio `live`");
-        assert_eq!(vuelta["live"]["type"], "micro_silenciado");
+        // Una fuente que esta version no conoce vuelve envuelta, con el original
+        // dentro, igual que una accion desconocida. Antes de que `live` fuera un
+        // campo con tipo esto pasaba sin mas; al darle tipo, una variante
+        // desconocida se llevaba la tecla entera y con ella el deck. Lo encontro
+        // este mismo test.
+        assert_eq!(vuelta["live"]["type"], "desconocida");
+        assert_eq!(vuelta["live"]["__original"]["type"], "micro_silenciado");
     }
 
     #[test]

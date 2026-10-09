@@ -605,3 +605,41 @@ body {
   color: var(--texto-tenue);
   pointer-events: none;
 }
+
+/* Lo que una tecla ensena del sistema.
+   Las cuatro esquinas estan pedidas: arriba a la derecha la esquina doblada de
+   carpeta, arriba a la izquierda la marca de rueda, y abajo esta la etiqueta, que
+   ocupa todo el ancho. Asi que la pastilla va sobre el icono, justo por debajo de
+   la esquina de carpeta, con su propio fondo para seguir leyendose encima. */
+.key-valor {
+  position: absolute;
+  right: 4px;
+  top: 16px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #1b1d22;
+  color: #cfd4da;
+  font-size: calc(var(--key) * 0.13);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Apagada: ademas de atenuar, se marca con una barra. El tono solo no vale para
+   quien no lo distingue, y aqui la diferencia es justo la informacion. */
+.key--apagada {
+  opacity: 0.55;
+}
+
+/* La barra va en un elemento propio y no en ::after porque .key--carpeta ya usa
+   ese pseudo para su esquina doblada, y una carpeta apagada perderia la esquina. */
+.key-tachado {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 50%;
+  height: 2px;
+  background: var(--texto-tenue);
+  transform: rotate(-20deg);
+  pointer-events: none;
+}

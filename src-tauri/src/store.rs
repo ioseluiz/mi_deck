@@ -190,6 +190,7 @@ pub fn default_deck() -> Deck {
                             target: "%USERPROFILE%".into(),
                         },
                         wheel: None,
+                        live: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -204,6 +205,7 @@ pub fn default_deck() -> Deck {
                             focus_if_running: false,
                         },
                         wheel: None,
+                        live: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -220,6 +222,7 @@ pub fn default_deck() -> Deck {
                             surface: "s-ejemplos".into(),
                         },
                         wheel: None,
+                        live: None,
                         extra: Default::default(),
                     },
                 ],
@@ -244,6 +247,7 @@ pub fn default_deck() -> Deck {
                             profile: None,
                         },
                         wheel: None,
+                        live: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -260,6 +264,7 @@ pub fn default_deck() -> Deck {
                             target: "%USERPROFILE%\\Downloads".into(),
                         },
                         wheel: None,
+                        live: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -279,6 +284,7 @@ pub fn default_deck() -> Deck {
                             hidden: false,
                         },
                         wheel: None,
+                        live: None,
                         extra: Default::default(),
                     },
                 ],

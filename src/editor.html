@@ -273,6 +273,40 @@
 
           <!-- Fuera de los grupos: la rueda vale para cualquier tipo de tecla.
                Y sin data-tipo, que mostrarGrupo lo ocultaria por su cuenta. -->
+          <!-- Tampoco lleva data-tipo: una fuente vale para cualquier tecla. -->
+          <h2>Lo que la tecla enseña</h2>
+          <label class="campo">
+            <span>Información del sistema</span>
+            <select id="ed-live">
+              <option value="">— Nada, una tecla normal —</option>
+              <option value="reloj">La hora</option>
+              <option value="bloq_mayus">Bloq Mayús</option>
+              <option value="bloq_num">Bloq Num</option>
+              <option value="app_abierta">Si una aplicación está abierta</option>
+              <option value="bateria">Batería</option>
+              <option value="memoria_usada">Memoria usada</option>
+              <option value="disco_libre">Espacio libre de una unidad</option>
+            </select>
+          </label>
+          <label class="campo" id="ed-live-exe-campo" hidden>
+            <span>Ejecutable <small>(de la aplicación que vigilar)</small></span>
+            <input id="ed-live-exe" type="text" placeholder="teams.exe" />
+          </label>
+          <label class="campo" id="ed-live-unidad-campo" hidden>
+            <span>Unidad</span>
+            <input id="ed-live-unidad" type="text" placeholder="C:" maxlength="3" />
+          </label>
+          <p class="nota">
+            El valor aparece en una pastilla en la esquina de la tecla, y se
+            actualiza solo. Lo que es un sí o un no —Bloq Mayús, si una aplicación
+            está abierta— <strong>apaga la tecla</strong> cuando está en no, con una
+            barra además del tono.
+          </p>
+          <p class="nota">
+            «Abierta» significa que el proceso existe, no que tenga ventana: Teams
+            minimizado a la bandeja sigue contando como abierto.
+          </p>
+
           <h2>Rueda del ratón</h2>
           <label class="check">
             <input id="ed-rueda-on" type="checkbox" />

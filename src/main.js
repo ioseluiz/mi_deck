@@ -85,6 +85,8 @@ let perfilMostrado = { surface: null, nombre: null };
  * alguien atrapado en un perfil sin saber por que.
  */
 let perfilFijado = false;
+/** id de tecla -> lo que ensena del sistema. Lo manda Rust, no se calcula aqui. */
+let vivo = {};
 /** id de boton -> URL de su imagen, ya lista para un <img>. */
 let urls = {};
 let temporizadorToast = 0;
@@ -114,7 +116,7 @@ function pintar(direccion = null) {
   // ya no estan donde estaban.
   cerrarMenu();
 
-  render($grid, nav, { rotas, urls, armada });
+  render($grid, nav, { rotas, urls, armada, vivo });
   renderMigas($migas, nav);
 
   const paginas = nav.pageCount;
@@ -862,6 +864,14 @@ function conectarEdicion() {
   // Cada escucha va en su propia llamada: `listen` devuelve una promesa, no la
   // ventana, asi que encadenar dos seguidas lanza y se lleva por delante todo lo
   // que venga despues de `conectarEventos`, incluida la primera pintada.
+  // El latido de Rust trae solo las teclas con fuente, y solo cuando algo cambio.
+  ventana()
+    .listen("estado-vivo", (ev) => {
+      vivo = ev?.payload ?? {};
+      pintar();
+    })
+    .catch((e) => console.warn("[MiDeck] no se pudo escuchar estado-vivo:", e));
+
   ventana()
     .listen("editar-perfil", (ev) => {
       perfilFijado = true;

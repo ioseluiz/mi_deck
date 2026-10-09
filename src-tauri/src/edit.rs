@@ -295,6 +295,7 @@ pub fn create_folder(
             surface: sid_nueva.clone(),
         },
         wheel: None,
+        live: None,
         extra: Default::default(),
     };
     let bid = boton.id.clone();
@@ -943,6 +944,7 @@ mod tests {
                 focus_if_running: false,
             },
             wheel: None,
+            live: None,
             extra: Default::default(),
         }
     }
