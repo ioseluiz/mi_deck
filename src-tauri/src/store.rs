@@ -26,6 +26,15 @@ pub struct LoadOutcome {
 
 /// Carga deck.json. Nunca falla: si el archivo no existe devuelve el deck por
 /// defecto, y si esta corrupto lo respalda y devuelve el deck por defecto.
+/// Quita la marca de orden de bytes si la hay.
+///
+/// Son los tres bytes EF BB BF del principio, que aqui llegan como un solo
+/// caracter U+FEFF porque el archivo ya se leyo como UTF-8. Solo cuenta el del
+/// principio: uno en medio es contenido.
+pub fn sin_bom(texto: &str) -> &str {
+    texto.strip_prefix('\u{feff}').unwrap_or(texto)
+}
+
 pub fn load(path: &Path) -> LoadOutcome {
     let raw = match fs::read_to_string(path) {
         Ok(raw) => raw,
@@ -44,6 +53,12 @@ pub fn load(path: &Path) -> LoadOutcome {
             };
         }
     };
+
+    // El Bloc de notas y PowerShell escriben UTF-8 **con BOM**, y serde no lo
+    // admite: sin quitarlo, a quien edite deck.json a mano con cualquiera de los
+    // dos le dirian que su archivo esta corrupto y le repondrian el deck por
+    // defecto. Un deck entero perdido por tres bytes invisibles.
+    let raw = sin_bom(&raw).to_string();
 
     match serde_json::from_str::<Deck>(&raw) {
         Ok(mut deck) => {
@@ -291,6 +306,40 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static CONTADOR: AtomicU32 = AtomicU32::new(0);
+
+    #[test]
+    fn un_deck_escrito_con_bom_se_lee_igual() {
+        // Paso de verdad durante las pruebas de la burbuja: PowerShell reescribio
+        // el deck con BOM, MiDeck lo dio por corrupto, lo respaldo y repuso el
+        // deck por defecto. Tres bytes invisibles se llevaban las teclas de
+        // cualquiera que editara el archivo con el Bloc de notas.
+        let dir = env::temp_dir().join(format!(
+            "mideck-bom-{}",
+            CONTADOR.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let ruta = dir.join("deck.json");
+
+        let json = serde_json::to_string(&default_deck()).unwrap();
+        fs::write(&ruta, format!("\u{feff}{json}")).unwrap();
+
+        let salida = load(&ruta);
+        assert!(
+            salida.recovered_from.is_none(),
+            "no deberia haberlo dado por corrupto"
+        );
+        assert_eq!(salida.deck.root, default_deck().root);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sin_bom_solo_quita_el_del_principio() {
+        assert_eq!(sin_bom("{}"), "{}");
+        assert_eq!(sin_bom("\u{feff}{}"), "{}");
+        // Uno en medio es contenido, no una marca.
+        assert_eq!(sin_bom("{\u{feff}}"), "{\u{feff}}");
+    }
 
     fn temp_dir(tag: &str) -> PathBuf {
         let n = CONTADOR.fetch_add(1, Ordering::SeqCst);
