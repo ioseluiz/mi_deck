@@ -603,6 +603,20 @@ fn delete_button(button_id: String, state: State<AppState>) -> Result<DeckView, 
     mutar(&state, |d| edit::delete_button(d, &button_id).map(|_| ()))
 }
 
+/// Pega una copia de una tecla en otro panel, pagina y celda.
+#[tauri::command]
+fn copy_button(
+    button_id: String,
+    to_surface: String,
+    to_page: usize,
+    to_position: u32,
+    state: State<AppState>,
+) -> Result<DeckView, String> {
+    mutar(&state, |d| {
+        edit::copy_button(d, &button_id, &to_surface, to_page, to_position).map(|_| ())
+    })
+}
+
 #[tauri::command]
 fn duplicate_button(button_id: String, state: State<AppState>) -> Result<DeckView, String> {
     mutar(&state, |d| {
@@ -1575,6 +1589,7 @@ pub fn run() {
             upsert_button,
             delete_button,
             duplicate_button,
+            copy_button,
             move_button,
             create_folder,
             rename_surface,

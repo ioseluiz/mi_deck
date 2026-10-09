@@ -337,6 +337,69 @@ function enviarRueda() {
   }).catch((e) => aviso(String(e)));
 }
 
+/** Etiqueta de una tecla segun el deck, que es la de verdad. */
+function etiquetaDe(id) {
+  return nav?.buttons?.find((b) => b.id === id)?.label ?? "";
+}
+
+/**
+ * Tecla copiada o cortada, esperando a que la peguen.
+ *
+ * Existe porque arrastrar no cruza fronteras: dentro de una carpeta no se puede
+ * llevar una tecla al nivel de arriba, porque ese nivel no esta en pantalla. Vive
+ * en memoria y sobrevive a entrar y salir de carpetas, que es justo el viaje para
+ * el que hace falta.
+ *
+ * @type {{id: string, modo: "copiar" | "cortar", etiqueta: string} | null}
+ */
+let portapapelesTecla = null;
+
+/**
+ * @param {string} id
+ * @param {"copiar" | "cortar"} modo
+ * @param {string} etiqueta
+ */
+function tomarTecla(id, modo, etiqueta) {
+  portapapelesTecla = { id, modo, etiqueta };
+  aviso(
+    `«${etiqueta || "Tecla"}» ${modo === "cortar" ? "cortada" : "copiada"}. ` +
+      "Clic derecho en una celda libre para pegarla.",
+    "info"
+  );
+}
+
+/** Pega lo que haya en el portapapeles en una celda de la pagina actual. */
+async function pegarTecla(indice) {
+  if (!portapapelesTecla) return;
+  const { id, modo, etiqueta } = portapapelesTecla;
+  const { surfaceId, page } = contextoActual();
+
+  try {
+    if (modo === "cortar") {
+      await invoke("move_button", {
+        buttonId: id,
+        toSurface: surfaceId,
+        toPage: page,
+        toPosition: indice,
+      });
+      // Cortar se gasta al pegar: dejarlo cargado invitaria a pegar dos veces la
+      // misma tecla, y la segunda fallaria porque ya no esta donde estaba.
+      portapapelesTecla = null;
+    } else {
+      await invoke("copy_button", {
+        buttonId: id,
+        toSurface: surfaceId,
+        toPage: page,
+        toPosition: indice,
+      });
+    }
+    await refrescar();
+    aviso(`«${etiqueta || "Tecla"}» pegada.`, "info");
+  } catch (e) {
+    aviso(String(e));
+  }
+}
+
 /** @param {string} botonId */
 async function pulsar(botonId) {
   // Apagar o vaciar la papelera por un clic de mas no tiene vuelta atras. La
@@ -653,6 +716,14 @@ function menuContextual(ev) {
       },
       { separador: true },
       {
+        label: "Copiar",
+        accion: () => tomarTecla(id, "copiar", etiquetaDe(id)),
+      },
+      {
+        label: "Cortar",
+        accion: () => tomarTecla(id, "cortar", etiquetaDe(id)),
+      },
+      {
         label: "Duplicar",
         accion: () => conMutacion(invoke("duplicate_button", { buttonId: id })),
       },
@@ -676,6 +747,13 @@ function menuContextual(ev) {
       {
         label: "Nueva carpeta",
         accion: () => nuevaCarpeta(indice),
+      },
+      {
+        label: portapapelesTecla
+          ? `Pegar «${portapapelesTecla.etiqueta || "tecla"}»`
+          : "Pegar",
+        desactivado: !portapapelesTecla,
+        accion: () => pegarTecla(indice),
       },
       { separador: true },
       { label: "Añadir una página", accion: () => añadirPagina() },

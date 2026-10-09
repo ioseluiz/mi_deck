@@ -549,6 +549,51 @@ pub fn copy_keys(deck: &mut Deck, desde: &str, hasta: &str) -> Result<usize, Str
     Ok(sin_sitio)
 }
 
+/// Copia una tecla a otro sitio del deck, sin tocar la original.
+///
+/// Hace falta para sacar una tecla de una carpeta: dentro de ella no se puede
+/// arrastrar al nivel de arriba, porque ese nivel no esta en pantalla. Con copiar
+/// y pegar se cruza cualquier frontera, y de paso se puede repetir una tecla en
+/// varios paneles sin volver a configurarla.
+///
+/// Si la tecla es una carpeta, el panel entero se copia igual que en `copy_keys`:
+/// compartirlo haria que editar la copia cambiara el original, que es lo contrario
+/// de lo que espera quien pega una copia.
+pub fn copy_button(
+    deck: &mut Deck,
+    button_id: &str,
+    a_superficie: &str,
+    a_pagina: usize,
+    a_posicion: u32,
+) -> Result<String, String> {
+    let (sid, pi, bi) =
+        localizar(deck, button_id).ok_or_else(|| format!("No existe el boton {button_id}"))?;
+    let mut copia = deck.surfaces[&sid].pages[pi].buttons[bi].clone();
+
+    if !deck.surfaces.contains_key(a_superficie) {
+        return Err(format!("No existe el panel {a_superficie}"));
+    }
+    asegurar_pagina(deck, a_superficie, a_pagina)?;
+
+    let Some(destino) = hueco_para(deck, a_superficie, a_pagina, a_posicion) else {
+        return Err("La pagina esta llena.".to_string());
+    };
+
+    if let Action::Folder { surface } = &copia.action {
+        let mut ya = std::collections::HashMap::new();
+        let suyo = clonar_panel(deck, surface, &mut ya);
+        copia.action = Action::Folder { surface: suyo };
+    }
+    copia.id = nuevo_id(deck, "b");
+    copia.position = destino;
+
+    let id = copia.id.clone();
+    deck.surfaces.get_mut(a_superficie).unwrap().pages[a_pagina]
+        .buttons
+        .push(copia);
+    Ok(id)
+}
+
 /// Celda libre del destino: la misma de origen si esta libre, si no la primera.
 fn hueco_para(deck: &Deck, surface_id: &str, pagina: usize, preferida: u32) -> Option<u32> {
     let reservada = celda_cero_reservada(deck, surface_id);
@@ -651,6 +696,73 @@ mod tests {
         create_profile(&mut deck, "excel.exe", "Excel").unwrap();
         let id = deck.profiles[0].id.clone();
         (deck, id)
+    }
+
+    #[test]
+    fn copiar_una_tecla_a_otro_panel_deja_la_original_donde_estaba() {
+        // El caso que lo motivo: sacar una tecla de una carpeta, donde arrastrar
+        // no llega porque el nivel de arriba no esta en pantalla.
+        let mut deck = default_deck();
+        deck.surfaces.insert("s-sub".into(), Surface::new("Dentro"));
+        deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            buttons: vec![boton("atrapada", 1)],
+        }];
+
+        let root = deck.root.clone();
+        let nuevo = copy_button(&mut deck, "atrapada", &root, 0, 4).unwrap();
+
+        // La original sigue dentro.
+        assert_eq!(deck.surfaces["s-sub"].pages[0].buttons.len(), 1);
+        // Y hay una copia fuera, con identificador propio.
+        let raiz = &deck.surfaces[&root].pages[0].buttons;
+        let copia = raiz.iter().find(|b| b.id == nuevo).expect("deberia estar");
+        assert_eq!(copia.position, 4);
+        assert_ne!(copia.id, "atrapada");
+    }
+
+    #[test]
+    fn copiar_una_carpeta_le_da_su_propio_panel() {
+        // Compartirlo haria que editar la copia cambiara el original.
+        let mut deck = default_deck();
+        deck.surfaces
+            .insert("s-sub".into(), Surface::new("Carpeta"));
+        deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            buttons: vec![boton("dentro", 1)],
+        }];
+        let mut carpeta = boton("bc", 4);
+        carpeta.action = Action::Folder {
+            surface: "s-sub".into(),
+        };
+        let root = deck.root.clone();
+        deck.surfaces.get_mut(&root).unwrap().pages[0]
+            .buttons
+            .push(carpeta);
+
+        let nuevo = copy_button(&mut deck, "bc", &root, 0, 8).unwrap();
+
+        let raiz = &deck.surfaces[&root].pages[0].buttons;
+        let copia = raiz.iter().find(|b| b.id == nuevo).unwrap();
+        let Action::Folder { surface } = &copia.action else {
+            panic!("deberia seguir siendo una carpeta");
+        };
+        assert_ne!(surface, "s-sub", "la carpeta quedo compartida");
+        assert_eq!(deck.surfaces[surface].pages[0].buttons.len(), 1);
+    }
+
+    #[test]
+    fn pegar_en_una_celda_ocupada_busca_hueco_en_vez_de_pisar() {
+        let mut deck = default_deck();
+        let root = deck.root.clone();
+        let ocupada = deck.surfaces[&root].pages[0].buttons[0].position;
+        let id = deck.surfaces[&root].pages[0].buttons[0].id.clone();
+        let antes = deck.surfaces[&root].pages[0].buttons.len();
+
+        let nuevo = copy_button(&mut deck, &id, &root, 0, ocupada).unwrap();
+
+        let raiz = &deck.surfaces[&root].pages[0].buttons;
+        assert_eq!(raiz.len(), antes + 1, "no se perdio ninguna");
+        let copia = raiz.iter().find(|b| b.id == nuevo).unwrap();
+        assert_ne!(copia.position, ocupada, "la copia piso a la que estaba");
     }
 
     #[test]

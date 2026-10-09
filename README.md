@@ -483,6 +483,29 @@ las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
 
+## Copiar, cortar y pegar una tecla
+
+Clic derecho en una tecla → **Copiar** o **Cortar**; clic derecho en una celda libre
+→ **Pegar**. La entrada dice qué vas a pegar: *Pegar «Atrapada»*.
+
+Existe por un caso concreto que no tenía salida: **una tecla dentro de una carpeta
+no se puede sacar arrastrando**, porque el nivel de arriba no está en pantalla
+mientras estás dentro. El portapapeles vive en memoria y sobrevive a entrar y salir
+de carpetas y a cambiar de página, que es justo el viaje para el que hace falta.
+
+| | |
+|---|---|
+| **Copiar** | Deja la original donde está y la copia lleva identificador nuevo. Se puede pegar varias veces |
+| **Cortar** | Mueve la tecla. Se gasta al pegar: dejarlo cargado invitaría a pegar dos veces lo mismo, y la segunda fallaría |
+| **Pegar** | En la celda del clic derecho. Si estuviera ocupada, va al primer hueco: pegar no puede pisar nada |
+
+Copiar una **carpeta** copia su panel entero, no lo comparte. Si lo compartiera,
+editar la copia cambiaría el original.
+
+`Ctrl+V` sigue siendo *pegar una imagen en la tecla bajo el cursor*, que es lo que
+era: cambiarlo ahora rompería un gesto ya aprendido. El portapapeles de teclas va
+solo por el menú.
+
 ## La rueda del ratón sobre una tecla
 
 Girar la rueda encima de una tecla puede subir y bajar algo sin pulsar nada. Es el
