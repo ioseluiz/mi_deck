@@ -36,6 +36,10 @@ EXIGENCIAS = [
     # que distinguirse de una tecla normal sin depender solo del tono, porque
     # quien no distingue el rojo necesita verlo igual.
     ("borde de tecla armada sobre el panel", "--armada-borde", "--fondo", 3.0),
+    # La burbuja flotante vive sobre lo que sea: su fondo no se puede comprobar
+    # contra nada fijo. Lo que si tiene que cumplir es que su icono se distinga
+    # de su propia superficie, que es un grafico de interfaz (WCAG 1.4.11).
+    ("icono de la burbuja sobre su superficie", "--texto", "--tecla", 3.0),
     ("tecla armada frente a una normal", "--armada", "--tecla", 1.2),
     ("etiqueta sobre la tecla armada", "--texto", "--armada", 4.5),
 ]

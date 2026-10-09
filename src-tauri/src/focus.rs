@@ -413,6 +413,28 @@ unsafe fn ejecutable_de_ventana(hwnd: windows::Win32::Foundation::HWND) -> Optio
     Some(normalizar(Path::new(&ruta)))
 }
 
+/// Nombre del ejecutable de la ventana de delante **ahora mismo**, el nuestro
+/// incluido.
+///
+/// A diferencia de `ventana_anterior()`, que es la que `focus` recuerda, esta
+/// pregunta por el estado real del sistema. Sirve para comprobar si algo acaba de
+/// robar el foco.
+#[cfg(windows)]
+pub fn exe_en_primer_plano() -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_invalid() {
+        return None;
+    }
+    ejecutable_de(hwnd).map(|r| nombre_de_ejecutable(&r))
+}
+
+#[cfg(not(windows))]
+pub fn exe_en_primer_plano() -> Option<String> {
+    None
+}
+
 /// Ejecutable de la ventana que esta en primer plano ahora mismo.
 ///
 /// Solo para la siembra inicial. Devuelve `None` si la ventana de delante es

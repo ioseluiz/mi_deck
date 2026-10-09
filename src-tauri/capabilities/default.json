@@ -4,7 +4,8 @@
   "description": "Permisos de las ventanas de MiDeck. En Tauri 2 lo que no esta declarado aqui falla en tiempo de ejecucion, no de compilacion.",
   "windows": [
     "main",
-    "editor"
+    "editor",
+    "burbuja"
   ],
   "permissions": [
     "core:default",

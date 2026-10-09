@@ -100,6 +100,10 @@ pub struct Settings {
     pub screenshot_dir: String,
     /// Ademas de guardarla, dejarla en el portapapeles lista para pegar.
     pub screenshot_to_clipboard: bool,
+    /// La burbuja flotante que devuelve el panel. Apagada cuesta cero.
+    pub bubble: bool,
+    /// En que esquina vive la burbuja.
+    pub bubble_corner: BubbleCorner,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<WindowPos>,
     /// Ajustes que esta version no conoce. Ver `Deck::extra`.
@@ -122,10 +126,29 @@ impl Default for Settings {
             // Por defecto si: casi siempre la captura es para pegarla en un
             // correo o en un ticket, no para dejarla en una carpeta.
             screenshot_to_clipboard: true,
+            // Apagada por defecto: un segundo WebView2 cuesta memoria, y quien
+            // tenga el panel siempre visible no la necesita para nada.
+            bubble: false,
+            bubble_corner: BubbleCorner::default(),
             window: None,
             extra: serde_json::Map::new(),
         }
     }
+}
+
+/// Esquina de la pantalla donde vive la burbuja.
+///
+/// Son cuatro y no una posicion libre a proposito: arrastrarla obligaria a
+/// guardar coordenadas que dejan de valer al cambiar de monitor o de resolucion,
+/// y a distinguir un arrastre de un clic en 56 px, que es incomodo de acertar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BubbleCorner {
+    #[default]
+    BottomRight,
+    BottomLeft,
+    TopRight,
+    TopLeft,
 }
 
 /// Rejilla 5 x 3 = 15 teclas, el formato del Stream Deck MK.2.

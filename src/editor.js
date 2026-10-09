@@ -707,6 +707,8 @@ async function cargarAjustes(vista) {
   $("aj-minimized").checked = settings.start_minimized;
   $("aj-capturas-dir").value = settings.screenshot_dir ?? "";
   $("aj-capturas-portapapeles").checked = settings.screenshot_to_clipboard !== false;
+  $("aj-burbuja").checked = Boolean(settings.bubble);
+  $("aj-burbuja-esquina").value = settings.bubble_corner ?? "bottom_right";
   autostartInicial = Boolean(settings.start_with_windows);
   $("aj-autostart").checked = autostartInicial;
 
@@ -751,6 +753,8 @@ async function guardarAjustes() {
     start_minimized: $("aj-minimized").checked,
     screenshot_dir: $("aj-capturas-dir").value.trim(),
     screenshot_to_clipboard: $("aj-capturas-portapapeles").checked,
+    bubble: $("aj-burbuja").checked,
+    bubble_corner: $("aj-burbuja-esquina").value,
   };
   await invoke("update_settings", { settings: nuevos });
 

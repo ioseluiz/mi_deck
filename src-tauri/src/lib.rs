@@ -5,6 +5,7 @@
 //! pinta y envia eventos, asi que lo importante queda cubierto por cargo test.
 
 pub mod apps;
+pub mod burbuja;
 pub mod captura;
 pub mod edit;
 pub mod explorador;
@@ -186,11 +187,17 @@ fn get_deck(state: State<AppState>) -> DeckView {
 /// Imprescindible mientras no exista el editor visual: se edita el JSON a mano y
 /// se recarga sin reiniciar el widget.
 #[tauri::command]
-fn reload_deck(state: State<AppState>) -> DeckView {
+async fn reload_deck(app: AppHandle, state: State<'_, AppState>) -> Result<DeckView, String> {
     let cargado = store::load(&state.config_path);
+    let encendida = cargado.deck.settings.bubble;
+    let esquina = cargado.deck.settings.bubble_corner;
     *state.deck.lock().unwrap() = cargado.deck;
     *state.warnings.lock().unwrap() = cargado.warnings;
-    get_deck(state)
+
+    // Recargar es la via de quien edita deck.json a mano: la burbuja tiene que
+    // obedecer a lo que ponga ahi igual que todo lo demas.
+    let _ = burbuja::aplicar(&app, encendida, esquina);
+    Ok(get_deck(state))
 }
 
 /// Ejecuta la accion de un boton. Devuelve a donde navegar si era una carpeta.
@@ -316,11 +323,15 @@ fn hacer_captura(
     // El panel se aparta de la foto: capturar "toda la pantalla" y que salga el
     // boton que acabas de pulsar no es lo que nadie espera. Con la ventana activa
     // no hace falta, porque PrintWindow la dibuja ella misma.
-    let panel = (objetivo == captura::Objetivo::Pantalla)
+    let pantalla_entera = objetivo == captura::Objetivo::Pantalla;
+    let panel = pantalla_entera
         .then(|| app.get_webview_window("main"))
         .flatten();
     if let Some(w) = &panel {
         let _ = w.hide();
+        // La burbuja esta siempre encima de todo: si no se aparta tambien, sale
+        // en todas y cada una de las capturas de pantalla completa.
+        burbuja::visible(app, false);
         // Sin esta pausa el compositor no ha terminado de repintar y el panel
         // sale igualmente en la captura.
         std::thread::sleep(std::time::Duration::from_millis(140));
@@ -332,6 +343,7 @@ fn hacer_captura(
         let _ = w.show();
         let nivel = state.deck.lock().unwrap().settings.window_level;
         nivel::aplicar(w, nivel);
+        burbuja::visible(app, true);
     }
 
     let imagen = imagen?;
@@ -664,11 +676,24 @@ fn purge_orphans(state: State<AppState>) -> Result<DeckView, String> {
 }
 
 #[tauri::command]
-fn update_settings(settings: model::Settings, state: State<AppState>) -> Result<DeckView, String> {
-    mutar(&state, |d| {
+async fn update_settings(
+    app: AppHandle,
+    settings: model::Settings,
+    state: State<'_, AppState>,
+) -> Result<DeckView, String> {
+    let encendida = settings.bubble;
+    let esquina = settings.bubble_corner;
+
+    let vista = mutar(&state, |d| {
         d.settings = settings;
         Ok(())
-    })
+    })?;
+
+    // Asincrono a proposito: construir una ventana de forma sincrona dentro de un
+    // comando bloquea el hilo principal y la ventana sale en blanco. Ya costo una
+    // tarde con el editor; aqui se evita de salida.
+    burbuja::aplicar(&app, encendida, esquina)?;
+    Ok(vista)
 }
 
 /// Cambia la fuente de imagen de una tecla, dejando intactos el ajuste, la
@@ -1072,6 +1097,18 @@ fn close_editor(app: AppHandle) {
 
 // -------------------------------------------------------------------- ventana
 
+/// La burbuja pulsada: el mismo conmutador que el icono de la bandeja.
+///
+/// Comparten comando en vez de tener dos copias que acaben separandose.
+#[tauri::command]
+fn burbuja_pulsada(app: AppHandle) -> Result<(), String> {
+    let Some(panel) = app.get_webview_window("main") else {
+        return Err("No hay panel que mostrar.".to_string());
+    };
+    alternar_ventana(&panel);
+    Ok(())
+}
+
 fn alternar_ventana(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
         nivel::marcar_al_frente(false);
@@ -1277,6 +1314,8 @@ pub fn run() {
     let nivel_inicial = cargado.deck.settings.window_level;
     let atajo = cargado.deck.settings.hotkey.clone();
     let start_minimized = cargado.deck.settings.start_minimized;
+    let burbuja_on = cargado.deck.settings.bubble;
+    let burbuja_esquina = cargado.deck.settings.bubble_corner;
     let posicion = cargado.deck.settings.window;
 
     let estado = AppState {
@@ -1321,6 +1360,7 @@ pub fn run() {
             set_lock_position,
             set_autostart,
             open_config_file,
+            burbuja_pulsada,
             open_repo,
             import_image,
             unused_images,
@@ -1415,6 +1455,10 @@ pub fn run() {
                 });
             }
             registrar_atajo(app.handle(), atajo.as_deref());
+
+            if let Err(e) = burbuja::aplicar(app.handle(), burbuja_on, burbuja_esquina) {
+                eprintln!("[MiDeck] no se pudo crear la burbuja: {e}");
+            }
 
             if !start_minimized {
                 let _ = window.show();

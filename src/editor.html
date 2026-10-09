@@ -387,6 +387,34 @@
           <button type="button" id="aj-perfil-anadir">Añadir perfil</button>
         </div>
 
+        <h2>Burbuja flotante</h2>
+        <label class="check">
+          <input id="aj-burbuja" type="checkbox" />
+          <span>Mostrar una burbuja que trae el panel de vuelta</span>
+        </label>
+        <label class="campo">
+          <span>Esquina</span>
+          <select id="aj-burbuja-esquina">
+            <option value="bottom_right">Abajo a la derecha</option>
+            <option value="bottom_left">Abajo a la izquierda</option>
+            <option value="top_right">Arriba a la derecha</option>
+            <option value="top_left">Arriba a la izquierda</option>
+          </select>
+        </label>
+        <p class="nota">
+          Un botón redondo y pequeño, siempre encima de todo: un clic trae el panel
+          y otro lo esconde. Es lo que hace falta con el panel al nivel del
+          escritorio, donde si lo escondes hay que acordarse del atajo global.
+        </p>
+        <p class="nota">
+          <strong>No roba el foco.</strong> Pulsarla no se lo quita a la aplicación
+          que tengas delante, así que los atajos siguen llegando donde deben. Las
+          esquinas transparentes dejan pasar el clic a lo que haya debajo.
+        </p>
+        <p class="nota" id="aj-burbuja-coste">
+          Apagada no cuesta nada. Encendida añade una ventana más.
+        </p>
+
         <h2>Capturas de pantalla</h2>
         <label class="campo">
           <span>Carpeta <small>(vacío: Imágenes\MiDeck)</small></span>

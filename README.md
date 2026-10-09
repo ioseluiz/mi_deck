@@ -535,6 +535,53 @@ perfil de navegador puede escribirlo en `deck.json`, que lo acepta igual.
 **Una macro teclea sobre lo que tenga el foco.** Si una pausa se queda corta, lo
 que escriba acaba en otro sitio. El editor lo advierte.
 
+## La burbuja flotante
+
+Un botón redondo de 56 px en una esquina, siempre encima de todo: un clic trae el
+panel y otro lo esconde. Se enciende en **Ajustes → Burbuja flotante**, donde
+también se elige la esquina.
+
+Existe por el nivel *escritorio*: ahí el panel vive bajo todo lo demás y traerlo
+exige acordarse del atajo global o encontrar el icono en la bandeja. Es la misma
+raíz del reporte de «se cierra y no puedo volver a abrirla»: el panel no se
+cerraba, se escondía donde nadie sabía buscarlo.
+
+### No roba el foco, y eso no era gratis
+
+Si al pulsarla Windows le quitara el foco a la aplicación que tienes delante, se
+rompería todo lo de la fase 5: `devolver_foco()` no tendría a dónde volver y los
+atajos llegarían al sitio equivocado.
+
+Lo resuelve `WS_EX_NOACTIVATE`, aplicado a mano después de crear la ventana porque
+Tauri no lo expone. Era el supuesto sin verificar de todo el plan —nada garantizaba
+que WebView2 siguiera entregando los clics del ratón con ese estilo— así que la
+fase empezó por medirlo antes de dibujar nada. **Funciona**: con una consola
+delante, el clic llega al webview y el primer plano sigue siendo la consola.
+
+### Los tres detalles que la hacen usable
+
+| Detalle | Por qué |
+|---|---|
+| `WS_POPUP`, sin menú de sistema | Medido aquí: una ventana que lo conserva **no baja de 136 px de ancho** por mucho que se le pida 56, porque Windows le reserva sitio a unos botones que no existen |
+| `SetWindowRgn` elíptica | La ventana es cuadrada y el botón redondo: sin recorte, las cuatro esquinas transparentes se comerían los clics de lo que haya debajo |
+| `SPI_GETWORKAREA` y píxeles físicos | La posición se calcula contra el **área de trabajo**, no contra la pantalla, así que nunca queda debajo de la barra de tareas, esté donde esté |
+
+`WS_EX_TOOLWINDOW` además la saca del Alt+Tab, donde un botón de 56 px no pinta
+nada. Y al capturar toda la pantalla se aparta junto con el panel: si no, saldría
+en todas y cada una de las capturas.
+
+### Lo que cuesta, medido
+
+**Unos 65 MB**: en compilación de release, 460,5 MB con ella y 395,7 MB sin ella,
+y un proceso más de WebView2. En compilación de desarrollo salen +70 MB, así que
+la cifra es consistente.
+
+Es bastante más de lo que se estimó al planificarla, y por eso **viene apagada de
+fábrica** y al apagarla la ventana se destruye en vez de esconderse: un WebView2
+escondido sigue costando lo mismo. Si algún día molesta, la alternativa es
+reescribirla como ventana Win32 por capas, que no gasta casi nada pero son unas
+300 líneas de código inseguro sin poder reaprovechar nada del frontend.
+
 ## `%CARPETA%`: la carpeta que tienes delante
 
 Escribe `%CARPETA%` en una tecla y se sustituye por la ruta de la ventana del
