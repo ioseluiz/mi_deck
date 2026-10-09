@@ -260,6 +260,7 @@ ejecutable se resuelve a su ruta completa antes de lanzarlo.
 | `hotkey` | Envía una combinación de teclas | `keys` |
 | `text` | Teclea un texto literal | `text` |
 | `system` | Acción del catálogo de Windows | `command` |
+| `macro` | Varias acciones en orden, con pausas | `steps` |
 
 ### Elegir la aplicacion sin saber su ruta
 
@@ -481,6 +482,58 @@ entero: se respaldaba y se arrancaba de cero, y el usuario veía que había perd
 las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
+
+## Macros
+
+Una tecla, varios pasos en orden. Es lo que hace falta para automatizar una
+función de una aplicación: rara vez es *una* pulsación.
+
+```json
+{ "type": "macro", "steps": [
+  { "action": { "type": "hotkey", "keys": "Ctrl+L" }, "delay_ms": 200 },
+  { "action": { "type": "text",   "text": "cmd"    }, "delay_ms": 80  },
+  { "action": { "type": "hotkey", "keys": "Intro"  } }
+] }
+```
+
+Esa macro abre una consola en la carpeta que tengas delante en el Explorador, que
+es la secuencia que mucha gente hace a mano. **La pausa es después de cada paso**,
+que es como se piensa al escribirla: «manda `Ctrl+L`, espera a que la barra tome
+el foco, escribe `cmd`». Así tampoco hace falta un tipo de paso «esperar»: la
+espera cuelga del paso anterior.
+
+Un paso puede ser **cualquier acción de MiDeck**, incluida una captura de
+pantalla. Eso sale gratis de que el ejecutor viva en `run_action` y no en
+`launcher::execute`: hay un solo sitio que sabe ejecutar cualquier cosa.
+
+### Lo que se rechaza, y por qué
+
+| Límite | Motivo |
+|---|---|
+| Máximo 20 pasos | Una macro de cincuenta no es una tecla, es un script, y para eso está la acción `script` |
+| Pausas ≤ 10 s en total | Mientras corre, la tecla está ocupada; un tope evita que una errata deje el deck pensando medio minuto |
+| Una macro dentro de otra | Dos macros que se llamen entre sí serían recursión infinita |
+| Un paso que entra a una carpeta | Navegar a mitad de secuencia deja el panel donde nadie pidió |
+
+### Nada se ejecuta a medias
+
+**La secuencia entera se valida antes del primer paso.** Hizo falta ponerlo
+explícitamente y lo encontró un test: `execute` valida solo el lanzamiento que
+recibe, así que sin esa comprobación previa una errata en el paso tres se habría
+descubierto con los dos primeros ya ejecutados. Una macro a medias es peor que una
+que no arranca.
+
+El mensaje dice **qué paso** falla: «Paso 2: No se reconoce la tecla “Inventada”».
+
+### Límite del editor
+
+Cada fila del editor ofrece el campo principal de su tipo. El modelo admite
+cualquier acción completa en un paso, pero un formulario con todos los campos de
+cada tipo dentro de cada fila sería ilegible; quien necesite argumentos o un
+perfil de navegador puede escribirlo en `deck.json`, que lo acepta igual.
+
+**Una macro teclea sobre lo que tenga el foco.** Si una pausa se queda corta, lo
+que escriba acaba en otro sitio. El editor lo advierte.
 
 ## Perfiles por aplicación
 

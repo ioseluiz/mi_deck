@@ -228,6 +228,53 @@ button.primario:hover {
   color: #e8d5ae;
 }
 
+/* --------------------------------------------------------- pasos de macro */
+
+.pasos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pasos:empty::after {
+  content: "Añade el primer paso.";
+  font-size: 11.5px;
+  color: var(--texto-tenue);
+}
+
+.paso {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.paso-n {
+  width: 18px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--texto-tenue);
+  text-align: right;
+}
+
+.paso select[data-campo="tipo"] {
+  flex: 0 0 118px;
+}
+
+.paso [data-campo="valor"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.paso [data-campo="pausa"] {
+  flex: 0 0 64px;
+}
+
+/* Los botones de orden y borrado son cuadrados para que la fila no baile. */
+.paso button {
+  flex: 0 0 auto;
+  padding: 7px 8px;
+}
+
 /* ------------------------------------------------- perfiles por aplicacion */
 
 .lista-perfiles {

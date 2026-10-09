@@ -251,6 +251,147 @@ function prepararDesconocida(tipo, accion) {
     : "Esta tecla tiene una acción que esta versión de MiDeck no conoce.";
 }
 
+// ------------------------------------------------------------ macros
+
+/**
+ * Pasos de la macro que se esta editando.
+ *
+ * Se guardan aqui y no se leen del DOM en cada cambio porque reordenar o quitar
+ * un paso repinta la lista entera: el estado tiene que sobrevivir al repintado.
+ *
+ * @type {{tipo: string, valor: string, pausa: number}[]}
+ */
+let PASOS = [];
+
+/**
+ * Tipos que puede tener un paso, con el nombre de su campo principal.
+ *
+ * Es un subconjunto deliberado: el modelo admite cualquier accion en un paso,
+ * pero un formulario con todos los campos de cada tipo dentro de cada fila seria
+ * ilegible. Quien necesite argumentos o un perfil de navegador puede escribirlo
+ * en deck.json, que lo acepta igual.
+ */
+const TIPOS_DE_PASO = [
+  { tipo: "hotkey", etiqueta: "Atajo", pista: "Ctrl+Shift+S" },
+  { tipo: "text", etiqueta: "Texto", pista: "lo que se teclea" },
+  { tipo: "system", etiqueta: "Acción Windows", pista: "" },
+  { tipo: "app", etiqueta: "Aplicación", pista: "notepad.exe" },
+  { tipo: "url", etiqueta: "Sitio web", pista: "https://…" },
+  { tipo: "path", etiqueta: "Carpeta", pista: "C:\…" },
+  { tipo: "script", etiqueta: "Script", pista: "Get-Date" },
+];
+
+/** Pinta la lista de pasos desde `PASOS`. */
+function pintarPasos() {
+  const cont = $("ed-macro-pasos");
+  cont.innerHTML = PASOS.map((p, i) => {
+    const tipos = TIPOS_DE_PASO.map(
+      (t) =>
+        `<option value="${t.tipo}"${t.tipo === p.tipo ? " selected" : ""}>` +
+        `${escapar(t.etiqueta)}</option>`
+    ).join("");
+
+    // La accion de Windows se elige de una lista, no se escribe.
+    const campo =
+      p.tipo === "system"
+        ? `<select data-campo="valor">${opcionesSistema(p.valor)}</select>`
+        : `<input data-campo="valor" type="text" value="${escapar(p.valor)}" ` +
+          `placeholder="${escapar(pistaDe(p.tipo))}">`;
+
+    return (
+      `<div class="paso" data-i="${i}">` +
+      `<span class="paso-n">${i + 1}</span>` +
+      `<select data-campo="tipo">${tipos}</select>` +
+      campo +
+      `<input data-campo="pausa" type="number" min="0" max="10000" step="50" ` +
+      `value="${p.pausa}" title="Pausa después de este paso, en milisegundos">` +
+      `<button type="button" data-accion="subir" title="Subir"${i === 0 ? " disabled" : ""}>↑</button>` +
+      `<button type="button" data-accion="bajar" title="Bajar"${
+        i === PASOS.length - 1 ? " disabled" : ""
+      }>↓</button>` +
+      `<button type="button" data-accion="quitar" title="Quitar este paso">✕</button>` +
+      `</div>`
+    );
+  }).join("");
+}
+
+function pistaDe(tipo) {
+  return TIPOS_DE_PASO.find((t) => t.tipo === tipo)?.pista ?? "";
+}
+
+/** Las mismas opciones agrupadas del catalogo, para un paso de tipo system. */
+function opcionesSistema(elegido) {
+  return CATALOGO_SISTEMA.map(
+    (g) =>
+      `<optgroup label="${escapar(g.etiqueta)}">` +
+      (g.comandos ?? [])
+        .map(
+          (c) =>
+            `<option value="${escapar(c.id)}"${c.id === elegido ? " selected" : ""}>` +
+            `${escapar(c.etiqueta)}</option>`
+        )
+        .join("") +
+      "</optgroup>"
+  ).join("");
+}
+
+/** Pasa `PASOS` al formato del modelo. */
+function pasosAModelo() {
+  return PASOS.map((p) => ({
+    action: accionDePaso(p),
+    delay_ms: Math.max(0, Number(p.pausa) || 0),
+  }));
+}
+
+function accionDePaso(p) {
+  const v = String(p.valor ?? "");
+  switch (p.tipo) {
+    case "hotkey":
+      return { type: "hotkey", keys: v.trim() };
+    case "text":
+      return { type: "text", text: v };
+    case "system":
+      return { type: "system", command: v };
+    case "url":
+      return { type: "url", target: v.trim(), browser: "default", profile: null };
+    case "path":
+      return { type: "path", target: v.trim() };
+    case "script":
+      return { type: "script", shell: "powershell", target: v.trim(), args: "", hidden: false };
+    case "app":
+      return {
+        type: "app",
+        target: v.trim(),
+        args: "",
+        workdir: "",
+        focus_if_running: false,
+      };
+    default:
+      // Igual que en leerFormulario: un tipo sin case no puede pasar callado.
+      throw new Error(`Paso de tipo no contemplado: ${p.tipo}`);
+  }
+}
+
+/** Y al reves: del modelo a la forma plana que maneja la lista. */
+function pasosDesdeModelo(steps) {
+  return (steps ?? []).map((s) => {
+    const a = s.action ?? {};
+    const valor =
+      a.type === "hotkey"
+        ? a.keys ?? ""
+        : a.type === "text"
+          ? a.text ?? ""
+          : a.type === "system"
+            ? a.command ?? ""
+            : a.target ?? "";
+    return {
+      tipo: TIPOS_DE_PASO.some((t) => t.tipo === a.type) ? a.type : "hotkey",
+      valor: String(valor),
+      pausa: Number(s.delay_ms) || 0,
+    };
+  });
+}
+
 /** Muestra solo el grupo de campos del tipo de accion elegido. */
 function mostrarGrupo(tipo) {
   for (const g of document.querySelectorAll("[data-tipo]")) {
@@ -278,6 +419,9 @@ function volcarEnFormulario() {
   $("ed-urls-browser").value = tipo === "urls" ? a.browser ?? "default" : "default";
   $("ed-urls-profile").value = tipo === "urls" ? a.profile ?? "" : "";
   $("ed-urls-newwindow").checked = tipo === "urls" && Boolean(a.new_window);
+
+  PASOS = tipo === "macro" ? pasosDesdeModelo(a.steps) : [];
+  pintarPasos();
 
   if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
   mostrarAvisoSistema();
@@ -343,6 +487,9 @@ function leerFormulario() {
       break;
     case "system":
       tecla.action = { type: "system", command: $("ed-system-command").value };
+      break;
+    case "macro":
+      tecla.action = { type: "macro", steps: pasosAModelo() };
       break;
     case "unknown":
       // A proposito no se toca `tecla.action`: sigue siendo el objeto original
@@ -631,6 +778,7 @@ async function guardar() {
         text: !m.action.text && "Escribe el texto que debe teclear.",
         urls: !m.action.targets?.length && "Escribe al menos una dirección.",
         system: !m.action.command && "Elige una acción de Windows.",
+        macro: !m.action.steps?.length && "Añade al menos un paso a la macro.",
       }[m.action.type];
       if (faltante) throw new Error(faltante);
       // La lista es de los tipos que SI usan `target`, no de los que no: asi un
@@ -664,6 +812,10 @@ function dominioDe(url) {
 function etiquetaPorDefecto(action) {
   if (action.type === "hotkey") return action.keys ?? "Atajo";
   if (action.type === "unknown") return "Sin reconocer";
+  if (action.type === "macro") {
+    const n = action.steps?.length ?? 0;
+    return n === 1 ? "1 paso" : `${n} pasos`;
+  }
   if (action.type === "system") {
     return fichaSistema(action.command)?.etiqueta ?? "Acción de Windows";
   }
@@ -801,6 +953,51 @@ function conectar() {
     sincronizarListaApps();
     leerFormulario();
     refrescarIconoAuto();
+    pintarPrevia();
+  });
+
+  $("ed-macro-anadir").addEventListener("click", () => {
+    PASOS.push({ tipo: "hotkey", valor: "", pausa: 0 });
+    pintarPasos();
+    leerFormulario();
+    pintarPrevia();
+  });
+
+  // Delegacion: reordenar o quitar repinta la lista entera, asi que no tiene
+  // sentido enganchar manejadores a filas que dejan de existir.
+  $("ed-macro-pasos").addEventListener("click", (ev) => {
+    const accion = ev.target?.getAttribute?.("data-accion");
+    if (!accion) return;
+    const i = Number(ev.target.closest("[data-i]")?.getAttribute("data-i"));
+    if (!Number.isInteger(i)) return;
+
+    if (accion === "quitar") PASOS.splice(i, 1);
+    else if (accion === "subir" && i > 0) {
+      [PASOS[i - 1], PASOS[i]] = [PASOS[i], PASOS[i - 1]];
+    } else if (accion === "bajar" && i < PASOS.length - 1) {
+      [PASOS[i], PASOS[i + 1]] = [PASOS[i + 1], PASOS[i]];
+    }
+    pintarPasos();
+    leerFormulario();
+    pintarPrevia();
+  });
+
+  // `input` para los campos de texto y `change` para los desplegables: cambiar
+  // de tipo tiene que repintar la fila para que el campo que toca aparezca.
+  $("ed-macro-pasos").addEventListener("input", (ev) => {
+    const campo = ev.target?.getAttribute?.("data-campo");
+    const i = Number(ev.target.closest("[data-i]")?.getAttribute("data-i"));
+    if (!campo || !Number.isInteger(i) || !PASOS[i]) return;
+
+    if (campo === "valor") PASOS[i].valor = ev.target.value;
+    else if (campo === "pausa") PASOS[i].pausa = Number(ev.target.value) || 0;
+    else if (campo === "tipo") {
+      PASOS[i].tipo = ev.target.value;
+      // Un valor escrito para un atajo no significa nada como ruta.
+      PASOS[i].valor = "";
+      pintarPasos();
+    }
+    leerFormulario();
     pintarPrevia();
   });
 

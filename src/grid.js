@@ -24,6 +24,7 @@ export const ICONOS = {
   keyboard:
     '<svg viewBox="0 0 24 24"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1m2 3v2h2V8zm4 0v2h2V8zm4 0v2h2V8zm4 0v2h2V8zM5 12v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zM7 16v2h10v-2z"/></svg>',
   text: '<svg viewBox="0 0 24 24"><path d="M4 4h16v4h-2V6h-5v12h2v2H9v-2h2V6H6v2H4z"/></svg>',
+  rayo: '<svg viewBox="0 0 24 24"><path d="M13.5 2 4 14h5.5L8 22l10-12.5h-6z"/></svg>',
   pestanas:
     '<svg viewBox="0 0 24 24"><path d="M2 5h5v3H2zm6 0h5v3H8zm6 0h5v3h-5zM2 9h20v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>',
 
@@ -117,6 +118,8 @@ export function iconoPorAccion(accion) {
       return ICONOS.pestanas;
     case "system":
       return ICONOS[ICONOS_SISTEMA.get(accion.command)] ?? ICONOS.ventanas;
+    case "macro":
+      return ICONOS.rayo;
     case "unknown":
       // De una version mas nueva: se ve que pasa algo, y pulsarla lo explica.
       return ICONOS.aviso;

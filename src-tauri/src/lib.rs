@@ -123,6 +123,8 @@ fn destino_para_icono(action: &Action) -> Option<PathBuf> {
         | Action::Hotkey { .. }
         | Action::Text { .. }
         | Action::System { .. }
+        // Una macro no tiene un destino: su icono lo pone el frontend.
+        | Action::Macro { .. }
         | Action::Unknown { .. } => return None,
     };
 
@@ -235,18 +237,58 @@ fn run_action(
         });
     }
 
-    // Igual que Navigate: no la resuelve `execute`, porque hace falta la
-    // configuracion del usuario y el portapapeles de la aplicacion.
-    if let launcher::LaunchSpec::Capture { objetivo } = &spec {
-        let destino = hacer_captura(&app, &state, *objetivo)?;
-        return Ok(ActionOutcome {
-            navigate_to: None,
-            message: Some(format!("Captura guardada en {destino}")),
-        });
-    }
+    let message = ejecutar_spec(&app, &state, &spec)?;
+    Ok(ActionOutcome {
+        navigate_to: None,
+        message,
+    })
+}
 
-    launcher::execute(&spec)?;
-    Ok(ActionOutcome::nada())
+/// Ejecuta un lanzamiento, incluidas las variantes que `launcher::execute` no
+/// puede resolver por si solo.
+///
+/// La captura necesita los ajustes del usuario y el portapapeles; la secuencia
+/// necesita poder ejecutar cada paso, incluidos los que tambien son captura. Al
+/// tener un solo sitio que sabe ejecutar cualquier cosa, **un paso de macro puede
+/// ser cualquier accion de MiDeck sin ningun caso especial**.
+///
+/// Devuelve el aviso que haya que mostrar, si lo hay.
+fn ejecutar_spec(
+    app: &AppHandle,
+    state: &State<AppState>,
+    spec: &launcher::LaunchSpec,
+) -> Result<Option<String>, String> {
+    match spec {
+        launcher::LaunchSpec::Capture { objetivo } => hacer_captura(app, state, *objetivo)
+            .map(|destino| Some(format!("Captura guardada en {destino}"))),
+
+        launcher::LaunchSpec::Secuencia(pasos) => {
+            // La secuencia entera se valida ANTES de ejecutar el primer paso.
+            // Hace falta explicitamente: `execute` valida solo el spec que
+            // recibe, asi que sin esto una errata en el paso tres se descubriria
+            // con los dos primeros ya ejecutados, y una macro a medias es peor
+            // que una macro que no arranca. Lo encontro un test.
+            launcher::validate(spec).map_err(|e| e.to_string())?;
+
+            let mut ultimo = None;
+            for (i, paso) in pasos.iter().enumerate() {
+                // El numero de paso en el mensaje es la diferencia entre "la
+                // macro fallo" y saber que arreglar.
+                let aviso = ejecutar_spec(app, state, &paso.spec)
+                    .map_err(|e| format!("Paso {} de la macro: {e}", i + 1))?;
+                ultimo = aviso.or(ultimo);
+
+                if paso.pausa_ms > 0 {
+                    // Esto corre en el hilo del comando, no en el de la interfaz,
+                    // asi que el panel sigue respondiendo mientras espera.
+                    std::thread::sleep(std::time::Duration::from_millis(paso.pausa_ms as u64));
+                }
+            }
+            Ok(ultimo)
+        }
+
+        otro => launcher::execute(otro).map(|_| None),
+    }
 }
 
 /// Hace la captura, la guarda y la deja en el portapapeles si asi se pidio.

@@ -331,6 +331,16 @@ pub enum Action {
         command: crate::sistema::SystemCommand,
     },
 
+    /// Varias acciones en orden, con pausas entre ellas.
+    ///
+    /// Es lo que hace falta para automatizar una funcion de una aplicacion:
+    /// «pegar solo valores» en Excel son cuatro pulsaciones con una pausa en medio
+    /// para que el menu llegue a abrirse.
+    Macro {
+        #[serde(default)]
+        steps: Vec<MacroStep>,
+    },
+
     /// Un tipo de accion que esta version no conoce.
     ///
     /// Es la red de seguridad para volver a una version anterior. Sin ella, un
@@ -384,6 +394,19 @@ where
             },
         }),
     }
+}
+
+/// Un paso de una macro.
+///
+/// La pausa es **despues** del paso y no antes, que es como se piensa al
+/// escribirla: «manda Ctrl+L, espera a que la barra tome el foco, escribe cmd».
+/// Asi tampoco hace falta un tipo de paso «esperar»: la espera cuelga del paso
+/// anterior.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MacroStep {
+    pub action: Box<Action>,
+    #[serde(default)]
+    pub delay_ms: u32,
 }
 
 fn default_browser() -> String {
@@ -549,6 +572,7 @@ impl Action {
             Action::Hotkey { .. } => "hotkey",
             Action::Text { .. } => "text",
             Action::System { .. } => "system",
+            Action::Macro { .. } => "macro",
             Action::Unknown { .. } => "unknown",
         }
     }

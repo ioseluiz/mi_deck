@@ -26,6 +26,7 @@
               <option value="path">Abrir una carpeta o archivo</option>
               <option value="script">Ejecutar un script o comando</option>
               <option value="system">Acción de Windows</option>
+              <option value="macro">Macro: varios pasos en orden</option>
               <option value="hotkey">Enviar un atajo de teclado</option>
               <option value="text">Escribir un texto</option>
               <option value="folder">Entrar a una carpeta del deck</option>
@@ -119,6 +120,28 @@
               <select id="ed-system-command"></select>
             </label>
             <p class="nota" id="ed-system-aviso" hidden></p>
+          </div>
+
+          <div class="grupo" data-tipo="macro" hidden>
+            <div id="ed-macro-pasos" class="pasos"></div>
+            <div class="fila fila--envolver">
+              <button type="button" id="ed-macro-anadir">Añadir paso</button>
+            </div>
+            <p class="nota">
+              Los pasos se ejecutan en orden sobre la aplicación que tuvieras
+              delante. La pausa es <em>después</em> de cada paso: es lo que hace
+              falta para que un menú llegue a abrirse.
+            </p>
+            <p class="nota">
+              Ejemplo, abrir una consola en la carpeta del Explorador:
+              <code>Ctrl+L</code> con 120 ms → texto <code>cmd</code> con 50 ms →
+              <code>Intro</code>.
+            </p>
+            <p class="nota aviso">
+              Una macro teclea sobre lo que tenga el foco. Si una pausa se queda
+              corta, lo que escriba acaba en otro sitio: pruébala antes de darla por
+              buena.
+            </p>
           </div>
 
           <div class="grupo" data-tipo="unknown" hidden>

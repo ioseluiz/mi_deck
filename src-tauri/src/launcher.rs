@@ -44,10 +44,27 @@ pub enum LaunchSpec {
     /// Captura de pantalla propia. La resuelve `run_action`, no `execute`:
     /// necesita los ajustes del usuario y el portapapeles de la aplicacion.
     Capture { objetivo: crate::captura::Objetivo },
-    /// Varias cosas, en orden. Hace falta para abrir un grupo de direcciones con
-    /// el navegador predeterminado, donde no hay una sola linea de comandos que
-    /// las acepte todas.
-    Varios(Vec<LaunchSpec>),
+    /// Varias cosas en orden, con una pausa opcional tras cada una.
+    ///
+    /// Un solo concepto para dos usos: abrir un grupo de direcciones con el
+    /// navegador predeterminado --donde no hay una sola linea de comandos que las
+    /// acepte todas-- y las macros, que son lo mismo con pausas. La resuelve
+    /// `run_action`, no `execute`.
+    Secuencia(Vec<Paso>),
+}
+
+/// Un paso de una secuencia: que hacer y cuanto esperar despues.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Paso {
+    pub spec: LaunchSpec,
+    pub pausa_ms: u32,
+}
+
+impl Paso {
+    /// Paso sin espera, que es lo que necesitan las varias direcciones.
+    pub fn seguido(spec: LaunchSpec) -> Self {
+        Self { spec, pausa_ms: 0 }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -398,10 +415,10 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             // un destino por llamada: se abren una a una y el propio navegador
             // las agrupa como pestanas.
             if browser.eq_ignore_ascii_case("default") || browser.trim().is_empty() {
-                return Ok(LaunchSpec::Varios(
+                return Ok(LaunchSpec::Secuencia(
                     limpias
                         .into_iter()
-                        .map(|target| LaunchSpec::Shell { target })
+                        .map(|target| Paso::seguido(LaunchSpec::Shell { target }))
                         .collect(),
                 ));
             }
@@ -442,6 +459,66 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
                     .to_string(),
             },
         }),
+
+        Action::Macro { steps } => {
+            if steps.is_empty() {
+                return Err(LaunchError::Empty { kind: "macro" });
+            }
+            if steps.len() > MAX_PASOS {
+                return Err(LaunchError::Invalid {
+                    motivo: format!(
+                        "La macro tiene {} pasos y el limite es {MAX_PASOS}.",
+                        steps.len()
+                    ),
+                });
+            }
+            // Con saturating no hay desbordamiento que haga entrar en panico a
+            // una compilacion de desarrollo por un numero disparatado en el JSON.
+            let total = steps
+                .iter()
+                .fold(0u32, |acc, s| acc.saturating_add(s.delay_ms));
+            if total > MAX_PAUSA_TOTAL_MS {
+                return Err(LaunchError::Invalid {
+                    motivo: format!(
+                        "Las pausas suman {total} ms y el limite es {MAX_PAUSA_TOTAL_MS}: una \
+                         tecla no puede quedarse colgada tanto tiempo."
+                    ),
+                });
+            }
+
+            let mut pasos = Vec::with_capacity(steps.len());
+            for (i, paso) in steps.iter().enumerate() {
+                let n = i + 1;
+                match paso.action.as_ref() {
+                    // Sin esto, dos macros que se llamaran entre si serian una
+                    // recursion infinita.
+                    Action::Macro { .. } => {
+                        return Err(LaunchError::Invalid {
+                            motivo: format!("El paso {n} es otra macro, y eso no se permite."),
+                        })
+                    }
+                    // Navegar a mitad de una secuencia deja el panel en un sitio
+                    // que nadie pidio, y los pasos siguientes irian a otra parte.
+                    Action::Folder { .. } => {
+                        return Err(LaunchError::Invalid {
+                            motivo: format!(
+                            "El paso {n} entra a una carpeta del deck, que no cabe en una macro."
+                        ),
+                        })
+                    }
+                    _ => {}
+                }
+                let spec =
+                    build_launch(paso.action.as_ref()).map_err(|e| LaunchError::Invalid {
+                        motivo: format!("El paso {n} de la macro: {e}"),
+                    })?;
+                pasos.push(Paso {
+                    spec,
+                    pausa_ms: paso.delay_ms,
+                });
+            }
+            Ok(LaunchSpec::Secuencia(pasos))
+        }
 
         Action::System { command } => {
             use crate::sistema::Mecanismo;
@@ -550,6 +627,19 @@ fn programa_de_navegador(browser: &str) -> String {
 /// direcciones no es una tecla util, es un accidente.
 pub const MAX_URLS: usize = 20;
 
+/// Cuantos pasos puede tener una macro.
+///
+/// No es una limitacion tecnica sino de sentido comun, como la de las URLs: una
+/// macro de cincuenta pasos no es una tecla, es un script, y para eso ya existe
+/// la accion de tipo `script`.
+pub const MAX_PASOS: usize = 20;
+
+/// Cuanto pueden sumar las pausas de una macro.
+///
+/// Mientras corre, la tecla esta ocupada. Un tope evita que una errata en los
+/// milisegundos deje el deck pensando medio minuto sin que nadie entienda por que.
+pub const MAX_PAUSA_TOTAL_MS: u32 = 10_000;
+
 /// Si el ejecutable es de la familia Chromium, que es la que acepta
 /// `--new-window` seguido de una lista de direcciones.
 fn es_chromium(programa: &str) -> bool {
@@ -583,13 +673,20 @@ pub fn validate(spec: &LaunchSpec) -> Result<(), LaunchError> {
         LaunchSpec::System { .. } => Ok(()),
         // Nada que comprobar contra el disco: la carpeta se crea al guardar.
         LaunchSpec::Capture { .. } => Ok(()),
-        // Si una sola parte no es valida, la tecla se marca en rojo entera: mas
-        // vale no abrir nada que abrir la mitad de un grupo de direcciones.
-        LaunchSpec::Varios(partes) => {
-            if partes.is_empty() {
+        // Si un solo paso no es valido, la tecla se marca en rojo entera: mas
+        // vale no hacer nada que dejar una macro a medias o abrir la mitad de un
+        // grupo de direcciones.
+        LaunchSpec::Secuencia(pasos) => {
+            if pasos.is_empty() {
                 return Err(LaunchError::Empty { kind: "urls" });
             }
-            partes.iter().try_for_each(validate)
+            // El numero de paso en el mensaje es la diferencia entre "la macro
+            // esta mal" y saber que arreglar.
+            pasos.iter().enumerate().try_for_each(|(i, p)| {
+                validate(&p.spec).map_err(|e| LaunchError::Invalid {
+                    motivo: format!("Paso {}: {e}", i + 1),
+                })
+            })
         }
         LaunchSpec::Reveal { path } => existe(path),
         LaunchSpec::Shell { target } => {
@@ -686,16 +783,10 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
             Err("La captura tiene que resolverla run_action, no execute.".to_string())
         }
 
-        // Se intentan todas aunque una falle: si la tercera direccion de un grupo
-        // esta mal escrita, las otras cinco ya se abrieron y cerrarlas en cadena
-        // seria peor. Se informa de las que fallaron.
-        LaunchSpec::Varios(partes) => {
-            let fallos: Vec<String> = partes.iter().filter_map(|p| execute(p).err()).collect();
-            if fallos.is_empty() {
-                Ok(())
-            } else {
-                Err(fallos.join("; "))
-            }
+        // Si se llega aqui es que run_action no la intercepto, igual que con la
+        // captura. Se falla en voz alta en vez de no hacer nada.
+        LaunchSpec::Secuencia(_) => {
+            Err("La secuencia tiene que resolverla run_action, no execute.".to_string())
         }
 
         LaunchSpec::Process {
@@ -1223,13 +1314,13 @@ mod tests {
         let spec = build_launch(&urls(&["https://a", "https://b"], "default", false)).unwrap();
         assert_eq!(
             spec,
-            LaunchSpec::Varios(vec![
-                LaunchSpec::Shell {
+            LaunchSpec::Secuencia(vec![
+                Paso::seguido(LaunchSpec::Shell {
                     target: "https://a".into()
-                },
-                LaunchSpec::Shell {
+                }),
+                Paso::seguido(LaunchSpec::Shell {
                     target: "https://b".into()
-                },
+                }),
             ])
         );
     }
@@ -1240,9 +1331,9 @@ mod tests {
         let spec = build_launch(&urls(&["  https://a  ", "   ", ""], "default", false)).unwrap();
         assert_eq!(
             spec,
-            LaunchSpec::Varios(vec![LaunchSpec::Shell {
+            LaunchSpec::Secuencia(vec![Paso::seguido(LaunchSpec::Shell {
                 target: "https://a".into()
-            }])
+            })])
         );
     }
 
@@ -1273,15 +1364,189 @@ mod tests {
     fn un_grupo_de_urls_se_valida_entero() {
         // Una sola parte invalida marca la tecla: mas vale no abrir nada que
         // abrir media lista.
-        let spec = LaunchSpec::Varios(vec![
-            LaunchSpec::Shell {
+        let spec = LaunchSpec::Secuencia(vec![
+            Paso::seguido(LaunchSpec::Shell {
                 target: "https://a".into(),
-            },
-            LaunchSpec::Shell {
+            }),
+            Paso::seguido(LaunchSpec::Shell {
                 target: r"C:\no\existe\jamas.txt".into(),
-            },
+            }),
         ]);
         assert!(validate(&spec).is_err());
+    }
+
+    // ----------------------------------------------------------------- macros
+
+    fn paso(a: Action, ms: u32) -> crate::model::MacroStep {
+        crate::model::MacroStep {
+            action: Box::new(a),
+            delay_ms: ms,
+        }
+    }
+
+    fn atajo(k: &str) -> Action {
+        Action::Hotkey { keys: k.into() }
+    }
+
+    /// El caso de uso que motiva la funcionalidad: abrir una consola en la
+    /// carpeta que el Explorador tiene delante.
+    #[test]
+    fn una_macro_conserva_el_orden_y_las_pausas() {
+        let a = Action::Macro {
+            steps: vec![
+                paso(atajo("Ctrl+L"), 120),
+                paso(Action::Text { text: "cmd".into() }, 50),
+                paso(atajo("Intro"), 0),
+            ],
+        };
+        let LaunchSpec::Secuencia(pasos) = build_launch(&a).unwrap() else {
+            panic!("una macro deberia dar una secuencia");
+        };
+        assert_eq!(pasos.len(), 3);
+        assert_eq!(
+            pasos[0].spec,
+            LaunchSpec::Keys {
+                combinacion: "Ctrl+L".into()
+            }
+        );
+        assert_eq!(pasos[0].pausa_ms, 120);
+        assert_eq!(
+            pasos[1].spec,
+            LaunchSpec::Type {
+                texto: "cmd".into()
+            }
+        );
+        assert_eq!(pasos[1].pausa_ms, 50);
+        assert_eq!(pasos[2].pausa_ms, 0);
+    }
+
+    /// Sin esto, dos macros que se llamaran entre si serian recursion infinita.
+    #[test]
+    fn una_macro_dentro_de_otra_se_rechaza() {
+        let a = Action::Macro {
+            steps: vec![
+                paso(atajo("Ctrl+C"), 0),
+                paso(
+                    Action::Macro {
+                        steps: vec![paso(atajo("Ctrl+V"), 0)],
+                    },
+                    0,
+                ),
+            ],
+        };
+        let Err(LaunchError::Invalid { motivo }) = build_launch(&a) else {
+            panic!("deberia rechazarse la macro anidada");
+        };
+        assert!(motivo.contains("paso 2"), "no dice que paso: {motivo}");
+    }
+
+    #[test]
+    fn un_paso_que_navega_a_una_carpeta_se_rechaza() {
+        let a = Action::Macro {
+            steps: vec![paso(
+                Action::Folder {
+                    surface: "s-algo".into(),
+                },
+                0,
+            )],
+        };
+        let Err(LaunchError::Invalid { motivo }) = build_launch(&a) else {
+            panic!("deberia rechazarse el paso de carpeta");
+        };
+        assert!(motivo.contains("paso 1"), "no dice que paso: {motivo}");
+    }
+
+    #[test]
+    fn una_macro_demasiado_larga_se_rechaza() {
+        let a = Action::Macro {
+            steps: (0..MAX_PASOS + 1).map(|_| paso(atajo("F5"), 0)).collect(),
+        };
+        let Err(LaunchError::Invalid { motivo }) = build_launch(&a) else {
+            panic!("deberia rechazarse por larga");
+        };
+        assert!(motivo.contains("21"), "mensaje poco util: {motivo}");
+    }
+
+    #[test]
+    fn unas_pausas_que_dejarian_la_tecla_colgada_se_rechazan() {
+        let a = Action::Macro {
+            steps: vec![paso(atajo("F5"), 6000), paso(atajo("F5"), 6000)],
+        };
+        let Err(LaunchError::Invalid { motivo }) = build_launch(&a) else {
+            panic!("deberia rechazarse por lenta");
+        };
+        assert!(motivo.contains("12000"), "mensaje poco util: {motivo}");
+    }
+
+    /// Un numero disparatado en el JSON no puede hacer entrar en panico a una
+    /// compilacion de desarrollo por desbordamiento al sumar.
+    #[test]
+    fn una_pausa_enorme_no_desborda() {
+        let a = Action::Macro {
+            steps: vec![paso(atajo("F5"), u32::MAX), paso(atajo("F5"), u32::MAX)],
+        };
+        assert!(matches!(build_launch(&a), Err(LaunchError::Invalid { .. })));
+    }
+
+    #[test]
+    fn una_macro_vacia_da_error_en_vez_de_una_tecla_muerta() {
+        assert_eq!(
+            build_launch(&Action::Macro { steps: vec![] }),
+            Err(LaunchError::Empty { kind: "macro" })
+        );
+    }
+
+    /// Un paso mal escrito marca la tecla **antes de ejecutar ninguno**, y el
+    /// mensaje dice cual: es la diferencia entre "la macro fallo" y saber que
+    /// arreglar.
+    ///
+    /// La combinacion se comprueba al validar y no al construir, por el reparto
+    /// que ya tenia el modulo. Lo importante es que `validate` recorra la
+    /// secuencia entera, porque `run_action` la llama antes del primer paso; sin
+    /// eso, una errata en el tercero se descubriria con los dos primeros ya
+    /// ejecutados.
+    #[test]
+    fn un_paso_con_errata_se_detecta_sin_ejecutar_nada() {
+        let a = Action::Macro {
+            steps: vec![paso(atajo("Ctrl+C"), 0), paso(atajo("Ctrl+Inventada"), 0)],
+        };
+        let spec = build_launch(&a).expect("construir no comprueba las teclas");
+
+        let Err(LaunchError::Invalid { motivo }) = validate(&spec) else {
+            panic!("validar deberia detectar la errata");
+        };
+        assert!(motivo.contains("Paso 2"), "no dice que paso: {motivo}");
+        assert!(motivo.contains("Inventada"), "no dice que fallo: {motivo}");
+    }
+
+    /// La razon de que el ejecutor viva en run_action: un paso puede ser una
+    /// captura, que `execute` no sabe resolver sola.
+    #[test]
+    fn un_paso_puede_ser_una_captura() {
+        let a = Action::Macro {
+            steps: vec![paso(
+                Action::System {
+                    command: crate::sistema::SystemCommand::ScreenshotFull,
+                },
+                0,
+            )],
+        };
+        let LaunchSpec::Secuencia(pasos) = build_launch(&a).unwrap() else {
+            panic!("deberia dar una secuencia");
+        };
+        assert!(matches!(pasos[0].spec, LaunchSpec::Capture { .. }));
+    }
+
+    #[test]
+    fn execute_se_queja_en_voz_alta_si_le_llega_una_secuencia() {
+        // Si alguien olvida interceptarla en run_action, tiene que notarse.
+        let spec = LaunchSpec::Secuencia(vec![Paso::seguido(LaunchSpec::Keys {
+            combinacion: "F5".into(),
+        })]);
+        let Err(motivo) = execute(&spec) else {
+            panic!("deberia fallar");
+        };
+        assert!(motivo.contains("run_action"), "mensaje poco util: {motivo}");
     }
 
     // ------------------------------------------------------ catalogo windows
