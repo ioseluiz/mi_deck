@@ -228,6 +228,50 @@ button.primario:hover {
   color: #e8d5ae;
 }
 
+/* ------------------------------------------------- perfiles por aplicacion */
+
+.lista-perfiles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lista-perfiles:empty::after {
+  content: "Todavía no hay ningún perfil.";
+  font-size: 11.5px;
+  color: var(--texto-tenue);
+}
+
+.perfil {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  background: #191c21;
+  border: 1px solid #44474e;
+  border-radius: 8px;
+}
+
+.perfil--apagado {
+  opacity: 0.6;
+}
+
+.perfil-datos {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.perfil-nombre {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.perfil-exe {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--texto-tenue);
+}
+
 #acciones {
   display: flex;
   gap: 8px;

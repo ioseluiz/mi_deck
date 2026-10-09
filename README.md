@@ -504,6 +504,24 @@ La lista está **ordenada**: si dos perfiles cubren el mismo ejecutable, gana el
 primero. Por eso es una lista y no un mapa, cuyo orden de recorrido no se puede
 fijar.
 
+### Crearlos y quitarlos
+
+En **Ajustes → Perfiles por aplicación**. La aplicación se elige de entre las
+**que tienes abiertas**, no del menú Inicio: `apps::listar()` devuelve accesos
+directos (`.lnk`) y el gancho devuelve ejecutables (`.exe`), así que lo que se
+guardara nunca emparejaría con lo que se detecta. Tomándolo de una ventana
+abierta, el nombre es exactamente el que el gancho verá después. Queda un campo
+de texto para escribirlo a mano.
+
+Un segundo perfil para la misma aplicación **se rechaza**, porque gana el primero
+y el segundo no se activaría nunca.
+
+Quitar un perfil **no borra su superficie**, igual que borrar una tecla de carpeta
+no borra la carpeta: nada se borra en cascada. Sus teclas quedan guardadas y se
+recuperan volviendo a crear el perfil. La confirmación es de dos pulsaciones y no
+un `confirm()` del navegador, que en un webview de Tauri bloquea la ventana
+entera.
+
 ### Por nombre de ejecutable, no por ruta
 
 Se compara `excel.exe`, no la ruta completa. El mismo programa vive en sitios

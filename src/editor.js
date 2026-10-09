@@ -450,6 +450,104 @@ function rutaBiblioteca(archivo) {
 
 // ------------------------------------------------------------------- ajustes
 
+// ------------------------------------------------- perfiles por aplicacion
+
+/**
+ * Pinta la lista de perfiles y el desplegable de aplicaciones abiertas.
+ *
+ * Las aplicaciones se toman de las que estan abiertas ahora, no del menu Inicio:
+ * el nombre que se guarda asi es exactamente el que vera el gancho de primer
+ * plano, de modo que no hay forma de que el perfil no empareje.
+ */
+async function cargarPerfiles() {
+  const perfiles = await invoke("list_profiles");
+  $("aj-perfiles").innerHTML = perfiles
+    .map((p) => {
+      const clases = p.enabled ? "perfil" : "perfil perfil--apagado";
+      const teclas = p.teclas === 1 ? "1 tecla" : `${p.teclas} teclas`;
+      return (
+        `<div class="${clases}" data-perfil="${escapar(p.id)}">` +
+        `<label class="check" title="Activar o desactivar sin perder las teclas">` +
+        `<input type="checkbox" data-accion="activar"${p.enabled ? " checked" : ""}>` +
+        `</label>` +
+        `<span class="perfil-datos">` +
+        `<span class="perfil-nombre">${escapar(p.nombre || "(sin nombre)")}</span> ` +
+        `<span class="perfil-exe">${escapar(p.exes.join(", "))}</span>` +
+        `<br><span class="perfil-exe">${teclas}</span>` +
+        `</span>` +
+        `<button type="button" data-accion="quitar">Quitar…</button>` +
+        `</div>`
+      );
+    })
+    .join("");
+
+  const abiertas = await invoke("list_running_apps");
+  $("aj-perfil-app").innerHTML =
+    '<option value="">— Elige una aplicación abierta —</option>' +
+    abiertas
+      .map(
+        (a) =>
+          `<option value="${escapar(a.exe)}" data-titulo="${escapar(a.titulo)}">` +
+          `${escapar(a.exe)} — ${escapar(a.titulo)}</option>`
+      )
+      .join("");
+}
+
+/**
+ * Cuenta de carpetas sin usar.
+ *
+ * Se repinta tambien al tocar los perfiles, no solo al abrir Ajustes: quitar un
+ * perfil deja su superficie huerfana, y dejar el contador diciendo "no hay
+ * carpetas sin usar" justo despues es la clase de incoherencia que hace dudar de
+ * todo lo demas que diga la pantalla.
+ */
+function pintarHuerfanas(vista) {
+  const huerfanas = vista?.integrity?.orphans ?? [];
+  $("aj-huerfanas").textContent = huerfanas.length
+    ? `${huerfanas.length} carpeta(s) ya no son alcanzables desde la raíz. Siguen guardadas con sus teclas.`
+    : "No hay carpetas sin usar.";
+}
+
+/** Crea el perfil con lo que haya elegido o escrito el usuario. */
+async function anadirPerfil() {
+  error("");
+  const delDesplegable = $("aj-perfil-app").value;
+  const aMano = $("aj-perfil-exe").value.trim();
+  const exe = aMano || delDesplegable;
+  if (!exe) {
+    error("Elige una aplicación abierta o escribe su ejecutable.");
+    return;
+  }
+  // El nombre del perfil sale del titulo de la ventana cuando se eligio de la
+  // lista, que es mas reconocible que "excel.exe"; si no, del propio ejecutable.
+  const sel = $("aj-perfil-app").selectedOptions?.[0];
+  const titulo = !aMano && sel ? sel.getAttribute("data-titulo") : "";
+  const nombre = nombreDePerfil(exe, titulo ?? "");
+
+  pintarHuerfanas(await invoke("create_profile", { exe, name: nombre }));
+  await invoke("notify_deck_changed");
+  $("aj-perfil-exe").value = "";
+  $("aj-perfil-app").value = "";
+  await cargarPerfiles();
+}
+
+/**
+ * Nombre legible para un perfil nuevo.
+ *
+ * Un titulo de ventana es demasiado largo y cambia con el documento abierto, asi
+ * que se usa su ultimo tramo --lo que suele ser el nombre de la aplicacion-- y si
+ * no hay nada util, el ejecutable sin extension.
+ */
+function nombreDePerfil(exe, titulo) {
+  const tramos = String(titulo)
+    .split(/\s[-—·|]\s/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const ultimo = tramos[tramos.length - 1] ?? "";
+  if (ultimo && ultimo.length <= 30) return ultimo;
+  return exe.replace(/\.exe$/i, "");
+}
+
 async function cargarAjustes(vista) {
   settings = vista.deck.settings;
   $("aj-cols").value = settings.grid.cols;
@@ -465,11 +563,8 @@ async function cargarAjustes(vista) {
   autostartInicial = Boolean(settings.start_with_windows);
   $("aj-autostart").checked = autostartInicial;
 
-  const huerfanas = vista.integrity?.orphans ?? [];
-  $("aj-huerfanas").textContent = huerfanas.length
-    ? `${huerfanas.length} carpeta(s) ya no son alcanzables desde la raíz. Siguen guardadas con sus teclas.`
-    : "No hay carpetas sin usar.";
-
+  pintarHuerfanas(vista);
+  await cargarPerfiles();
   await refrescarImagenesSinUso();
 }
 
@@ -770,6 +865,67 @@ function conectar() {
       }
     });
   }
+
+  $("aj-perfil-anadir")?.addEventListener("click", () =>
+    anadirPerfil().catch((e) => error(String(e)))
+  );
+
+  // Delegacion: la lista se vuelve a pintar entera en cada cambio, asi que no
+  // tiene sentido enganchar manejadores a filas que dejan de existir.
+  //
+  // La confirmacion es de dos pulsaciones y no un `confirm()` del navegador: un
+  // dialogo modal en un webview de Tauri bloquea la ventana entera, y el panel ya
+  // usa este mismo gesto para sus acciones destructivas.
+  $("aj-perfiles")?.addEventListener("click", async (ev) => {
+    const boton = ev.target;
+    if (boton?.getAttribute?.("data-accion") !== "quitar") return;
+    const fila = boton.closest("[data-perfil]");
+    if (!fila) return;
+
+    if (boton.dataset.armado !== "si") {
+      // Primera pulsacion: avisar de que las teclas se conservan, que es lo que
+      // cualquiera teme al pulsar "Quitar".
+      error(
+        "Pulsa «Quitar» otra vez para confirmar. Las teclas del perfil NO se " +
+          "borran: quedan guardadas y las recuperas volviendo a crearlo."
+      );
+      boton.dataset.armado = "si";
+      boton.textContent = "¿Seguro?";
+      setTimeout(() => {
+        if (boton.isConnected && boton.dataset.armado === "si") {
+          boton.dataset.armado = "";
+          boton.textContent = "Quitar…";
+          error("");
+        }
+      }, 4000);
+      return;
+    }
+
+    try {
+      error("");
+      pintarHuerfanas(
+        await invoke("delete_profile", { profileId: fila.getAttribute("data-perfil") })
+      );
+      await invoke("notify_deck_changed");
+      await cargarPerfiles();
+    } catch (e) {
+      error(String(e));
+    }
+  });
+
+  $("aj-perfiles")?.addEventListener("change", async (ev) => {
+    if (ev.target?.getAttribute?.("data-accion") !== "activar") return;
+    const id = ev.target.closest("[data-perfil]")?.getAttribute("data-perfil");
+    try {
+      pintarHuerfanas(
+        await invoke("set_profile_enabled", { profileId: id, value: ev.target.checked })
+      );
+      await invoke("notify_deck_changed");
+      await cargarPerfiles();
+    } catch (e) {
+      error(String(e));
+    }
+  });
 
   $("aj-purgar")?.addEventListener("click", async () => {
     try {

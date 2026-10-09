@@ -349,6 +349,71 @@ pub fn rename_surface(deck: &mut Deck, surface_id: &str, nombre: &str) -> Result
     Ok(())
 }
 
+// ------------------------------------------------------------------- perfiles
+
+/// Crea un perfil con su superficie propia, vacia.
+///
+/// El ejecutable se guarda siempre como nombre suelto: si alguien pega una ruta
+/// completa, se queda con el ultimo tramo. Es la misma clave que produce el gancho
+/// de primer plano, y si no coincidieran el perfil no se activaria nunca.
+pub fn create_profile(deck: &mut Deck, exe: &str, nombre: &str) -> Result<String, String> {
+    let exe = crate::focus::nombre_de_ejecutable(exe);
+    if exe.is_empty() {
+        return Err("Hay que indicar la aplicacion.".to_string());
+    }
+    // Un segundo perfil para la misma aplicacion no se activaria nunca, porque
+    // gana el primero. Vale mas decirlo que dejarlo ahi sin funcionar.
+    if let Some(ya) = crate::perfiles::perfil_para(&deck.profiles, &exe) {
+        let como = deck
+            .surfaces
+            .get(&ya.surface)
+            .map(|s| s.name.as_str())
+            .unwrap_or("otro");
+        return Err(format!("Ya hay un perfil para {exe}: «{como}»."));
+    }
+
+    let nombre = if nombre.trim().is_empty() {
+        exe.clone()
+    } else {
+        nombre.trim().to_string()
+    };
+
+    let sid = nuevo_id(deck, "s");
+    deck.surfaces.insert(sid.clone(), Surface::new(&nombre));
+    deck.profiles.push(crate::perfiles::Profile {
+        id: nuevo_id(deck, "p"),
+        surface: sid.clone(),
+        exes: vec![exe],
+        enabled: true,
+    });
+    Ok(sid)
+}
+
+/// Quita el perfil **sin borrar su superficie**.
+///
+/// Sigue la regla de todo el modulo: nada se borra en cascada. Sus teclas quedan
+/// guardadas y la superficie pasa a estar huerfana, igual que al borrar una tecla
+/// de carpeta; recuperarlas es volver a crear el perfil o apuntarles una carpeta.
+pub fn delete_profile(deck: &mut Deck, id: &str) -> Result<(), String> {
+    let antes = deck.profiles.len();
+    deck.profiles.retain(|p| p.id != id);
+    if deck.profiles.len() == antes {
+        return Err(format!("No existe el perfil {id}"));
+    }
+    Ok(())
+}
+
+/// Habilita o deshabilita un perfil sin perder nada.
+pub fn set_profile_enabled(deck: &mut Deck, id: &str, enabled: bool) -> Result<(), String> {
+    let p = deck
+        .profiles
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("No existe el perfil {id}"))?;
+    p.enabled = enabled;
+    Ok(())
+}
+
 /// Borra superficies que nadie referencia. Accion explicita del usuario.
 pub fn purge_orphans(deck: &mut Deck) -> Vec<String> {
     let huerfanas = integrity::check(deck).orphans;
@@ -381,6 +446,94 @@ mod tests {
 
     fn contar(deck: &Deck, sid: &str, pagina: usize) -> usize {
         deck.surfaces[sid].pages[pagina].buttons.len()
+    }
+
+    // ----------------------------------------------------------- perfiles
+
+    #[test]
+    fn crear_un_perfil_deja_su_superficie_vacia_y_lista() {
+        let mut deck = default_deck();
+        let sid = create_profile(&mut deck, "EXCEL.EXE", "Excel").unwrap();
+
+        assert_eq!(deck.profiles.len(), 1);
+        // Siempre el nombre suelto y en minusculas: es la clave que produce el
+        // gancho de primer plano.
+        assert_eq!(deck.profiles[0].exes, vec!["excel.exe"]);
+        assert_eq!(deck.surfaces[&sid].name, "Excel");
+        assert!(deck.profiles[0].enabled);
+    }
+
+    #[test]
+    fn una_ruta_completa_se_reduce_al_nombre_del_ejecutable() {
+        let mut deck = default_deck();
+        create_profile(
+            &mut deck,
+            r"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE",
+            "",
+        )
+        .unwrap();
+        assert_eq!(deck.profiles[0].exes, vec!["excel.exe"]);
+        // Sin nombre, se usa el del ejecutable.
+        let sid = &deck.profiles[0].surface;
+        assert_eq!(deck.surfaces[sid].name, "excel.exe");
+    }
+
+    /// Un segundo perfil para la misma aplicacion no se activaria nunca, porque
+    /// gana el primero. Vale mas decirlo que dejarlo ahi sin funcionar.
+    #[test]
+    fn no_se_pueden_crear_dos_perfiles_para_la_misma_app() {
+        let mut deck = default_deck();
+        create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+
+        let Err(motivo) = create_profile(&mut deck, "Excel.exe", "Otro") else {
+            panic!("deberia rechazarse el duplicado");
+        };
+        assert!(motivo.contains("Excel"), "mensaje poco util: {motivo}");
+        assert_eq!(deck.profiles.len(), 1);
+    }
+
+    #[test]
+    fn un_perfil_sin_aplicacion_se_rechaza() {
+        let mut deck = default_deck();
+        assert!(create_profile(&mut deck, "   ", "Algo").is_err());
+        assert!(deck.profiles.is_empty());
+    }
+
+    /// Nada se borra en cascada, la regla de todo el modulo: quitar el perfil no
+    /// puede llevarse las teclas que el usuario configuro en el.
+    #[test]
+    fn borrar_un_perfil_conserva_sus_teclas() {
+        let mut deck = default_deck();
+        let sid = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        upsert_button(&mut deck, &sid, 0, boton("b-excel", 0)).unwrap();
+
+        let id = deck.profiles[0].id.clone();
+        delete_profile(&mut deck, &id).unwrap();
+
+        assert!(deck.profiles.is_empty());
+        assert!(deck.surfaces.contains_key(&sid), "se llevo la superficie");
+        assert_eq!(contar(&deck, &sid, 0), 1, "se llevo las teclas");
+    }
+
+    #[test]
+    fn borrar_un_perfil_que_no_existe_da_error() {
+        let mut deck = default_deck();
+        assert!(delete_profile(&mut deck, "p-inventado").is_err());
+    }
+
+    #[test]
+    fn deshabilitar_un_perfil_no_pierde_nada() {
+        let mut deck = default_deck();
+        let sid = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        upsert_button(&mut deck, &sid, 0, boton("b-excel", 0)).unwrap();
+        let id = deck.profiles[0].id.clone();
+
+        set_profile_enabled(&mut deck, &id, false).unwrap();
+        assert!(!deck.profiles[0].enabled);
+        assert_eq!(contar(&deck, &sid, 0), 1);
+
+        set_profile_enabled(&mut deck, &id, true).unwrap();
+        assert!(deck.profiles[0].enabled);
     }
 
     // ------------------------------------------- la celda 0 de un perfil

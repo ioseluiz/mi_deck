@@ -536,6 +536,61 @@ fn rename_surface(
     mutar(&state, |d| edit::rename_surface(d, &surface_id, &name))
 }
 
+// ------------------------------------------------------------------ perfiles
+
+/// Perfil tal y como lo necesita la interfaz de Ajustes.
+#[derive(Serialize)]
+pub struct PerfilInfo {
+    id: String,
+    surface: String,
+    /// Nombre de la superficie, que es lo que el usuario reconoce.
+    nombre: String,
+    exes: Vec<String>,
+    enabled: bool,
+    /// Cuantas teclas tiene configuradas, para no borrar trabajo sin saberlo.
+    teclas: usize,
+}
+
+#[tauri::command]
+fn list_profiles(state: State<AppState>) -> Vec<PerfilInfo> {
+    let deck = state.deck.lock().unwrap();
+    deck.profiles
+        .iter()
+        .map(|p| {
+            let s = deck.surfaces.get(&p.surface);
+            PerfilInfo {
+                id: p.id.clone(),
+                surface: p.surface.clone(),
+                nombre: s.map(|s| s.name.clone()).unwrap_or_default(),
+                exes: p.exes.clone(),
+                enabled: p.enabled,
+                teclas: s
+                    .map(|s| s.pages.iter().map(|pg| pg.buttons.len()).sum())
+                    .unwrap_or(0),
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn create_profile(exe: String, name: String, state: State<AppState>) -> Result<DeckView, String> {
+    mutar(&state, |d| edit::create_profile(d, &exe, &name).map(|_| ()))
+}
+
+#[tauri::command]
+fn delete_profile(profile_id: String, state: State<AppState>) -> Result<DeckView, String> {
+    mutar(&state, |d| edit::delete_profile(d, &profile_id))
+}
+
+#[tauri::command]
+fn set_profile_enabled(
+    profile_id: String,
+    value: bool,
+    state: State<AppState>,
+) -> Result<DeckView, String> {
+    mutar(&state, |d| edit::set_profile_enabled(d, &profile_id, value))
+}
+
 #[tauri::command]
 fn add_page(surface_id: String, state: State<AppState>) -> Result<DeckView, String> {
     mutar(&state, |d| edit::add_page(d, &surface_id).map(|_| ()))
@@ -1246,6 +1301,10 @@ pub fn run() {
             list_system_commands,
             list_installed_apps,
             list_running_apps,
+            list_profiles,
+            create_profile,
+            delete_profile,
+            set_profile_enabled,
             icon_for_target,
             notify_deck_changed
         ])

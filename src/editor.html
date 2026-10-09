@@ -318,6 +318,26 @@
           <span>Arrancar oculto en la bandeja</span>
         </label>
 
+        <h2>Perfiles por aplicación</h2>
+        <p class="nota">
+          El panel cambia de teclas según la aplicación que tengas delante. Con un
+          perfil activo aparece un ancla en la barra de título para fijarlo.
+        </p>
+        <div id="aj-perfiles" class="lista-perfiles"></div>
+        <div class="fila fila--envolver">
+          <label class="campo">
+            <span>Aplicación <small>(de las que tienes abiertas)</small></span>
+            <select id="aj-perfil-app"></select>
+          </label>
+        </div>
+        <div class="fila fila--envolver">
+          <label class="campo">
+            <span>O escribe el ejecutable</span>
+            <input id="aj-perfil-exe" type="text" placeholder="excel.exe" />
+          </label>
+          <button type="button" id="aj-perfil-anadir">Añadir perfil</button>
+        </div>
+
         <h2>Capturas de pantalla</h2>
         <label class="campo">
           <span>Carpeta <small>(vacío: Imágenes\MiDeck)</small></span>
