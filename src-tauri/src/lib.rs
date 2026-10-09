@@ -7,6 +7,7 @@
 pub mod apps;
 pub mod captura;
 pub mod edit;
+pub mod explorador;
 pub mod focus;
 pub mod icons;
 pub mod images;
@@ -204,6 +205,11 @@ fn run_action(
         find_action(&deck, &button_id)
             .ok_or_else(|| format!("No existe el boton {button_id} en el deck."))?
     };
+
+    // %CARPETA% se resuelve aqui y no dentro de `expand_env`, que es pura y esta
+    // cubierta por tests: meterle una llamada a COM la dejaria sin poder probarse.
+    // La consulta solo ocurre si la tecla menciona la variable.
+    let accion = explorador::con_variables(accion, explorador::carpeta_disponible)?;
 
     // Si la tecla pide traer al frente lo que ya este abierto, se intenta antes
     // de lanzar: pulsarla diez veces no debe dejar diez copias de la aplicacion.

@@ -59,6 +59,12 @@
               <span>Carpeta de trabajo</span>
               <input id="ed-app-workdir" type="text" />
             </label>
+            <p class="nota">
+              Escribe <code>%CARPETA%</code> y se sustituye por la carpeta que tengas
+              delante en el Explorador. En argumentos, entre comillas: <code>"%CARPETA%"</code>.
+              Sin un Explorador delante, la tecla avisa y no
+              hace nada.
+            </p>
             <label class="check">
               <input id="ed-app-focus" type="checkbox" />
               <span>Traer al frente si ya está abierta, en vez de abrir otra</span>
@@ -133,9 +139,14 @@
               falta para que un menú llegue a abrirse.
             </p>
             <p class="nota">
-              Ejemplo, abrir una consola en la carpeta del Explorador:
-              <code>Ctrl+L</code> con 120 ms → texto <code>cmd</code> con 50 ms →
-              <code>Intro</code>.
+              Ejemplo: <code>Ctrl+C</code> con 100 ms → <code>Alt+Tab</code> con
+              150 ms → <code>Ctrl+V</code>.
+            </p>
+            <p class="nota">
+              Para abrir algo <em>en la carpeta que tienes delante</em> no hace falta
+              una macro: usa una acción <em>Aplicación</em> con <code>cmd.exe</code> y
+              carpeta de trabajo <code>%CARPETA%</code>. No teclea nada, así que no
+              puede equivocarse de ventana.
             </p>
             <p class="nota aviso">
               Una macro teclea sobre lo que tenga el foco. Si una pausa se queda
@@ -162,6 +173,11 @@
                 <button type="button" data-examinar="ed-path-target" data-filtro="any">Archivo…</button>
               </span>
             </label>
+            <p class="nota">
+              Escribe <code>%CARPETA%</code> y se sustituye por la carpeta que tengas
+              delante en el Explorador. Sin un Explorador delante, la tecla avisa y no
+              hace nada.
+            </p>
             <p class="nota">Una carpeta se abre en el Explorador. Un archivo se abre con el Explorador y queda seleccionado.</p>
           </div>
 
@@ -188,6 +204,12 @@
               <input id="ed-script-hidden" type="checkbox" />
               <span>Sin ventana</span>
             </label>
+            <p class="nota">
+              Escribe <code>%CARPETA%</code> y se sustituye por la carpeta que tengas
+              delante en el Explorador. En argumentos, entre comillas: <code>"%CARPETA%"</code>.
+              Sin un Explorador delante, la tecla avisa y no
+              hace nada.
+            </p>
             <p class="nota aviso">
               Lo que pongas aquí se ejecuta con tus permisos. No guardes contraseñas
               ni tokens en este archivo.
@@ -219,6 +241,10 @@
               <span>Texto que teclear</span>
               <textarea id="ed-text-texto" rows="4" placeholder="Tu firma, un número de proyecto, una plantilla…"></textarea>
             </label>
+            <p class="nota">
+              <code>%CARPETA%</code> se sustituye por la ruta de la carpeta que tengas
+              delante en el Explorador: es la forma de copiarla.
+            </p>
             <p class="nota">
               Se teclea carácter a carácter en la aplicación que tuvieras delante.
               Admite tildes, <code>ñ</code> y emoji.

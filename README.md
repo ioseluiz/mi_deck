@@ -535,6 +535,59 @@ perfil de navegador puede escribirlo en `deck.json`, que lo acepta igual.
 **Una macro teclea sobre lo que tenga el foco.** Si una pausa se queda corta, lo
 que escriba acaba en otro sitio. El editor lo advierte.
 
+## `%CARPETA%`: la carpeta que tienes delante
+
+Escribe `%CARPETA%` en una tecla y se sustituye por la ruta de la ventana del
+Explorador que tuvieras delante al pulsarla.
+
+| Tecla | Acción | Campo |
+|---|---|---|
+| Consola aquí | `app` | `cmd.exe`, carpeta de trabajo `%CARPETA%` |
+| PowerShell aquí | `app` | `powershell.exe`, carpeta de trabajo `%CARPETA%` |
+| Abrir en VS Code | `app` | argumentos `"%CARPETA%"` |
+| Copiar la ruta | `text` | `%CARPETA%` |
+| Script sobre esta carpeta | `script` | argumentos `-Ruta "%CARPETA%"` |
+
+Una pieza, muchas teclas. Entrecomíllala cuando vaya en argumentos: sin comillas,
+«Mis documentos» se parte en dos.
+
+### Por qué no basta con una macro
+
+La macro `Ctrl+L` → `cmd` → `Intro` abre la consola en esa carpeta, pero lo hace a
+ciegas: MiDeck no sabe dónde está, solo aporrea el teclado. Con la ventana
+equivocada delante esas tres letras acaban escritas en un documento —en Word,
+`Ctrl+L` alinea el párrafo a la izquierda y lo demás se escribe tal cual— y si la
+pausa se queda corta, también.
+
+`%CARPETA%` pregunta la ruta y la recibe como dato. **No teclea nada.** Si no hay
+un Explorador delante, la tecla no hace nada y lo dice: «Esta tecla usa %CARPETA%,
+y no hay ninguna ventana del Explorador delante». Fallar es deliberado: lanzar con
+la variable sin resolver acabaría creando una carpeta llamada `%CARPETA%`.
+
+### De dónde sale la ruta
+
+De `IShellWindows`, buscando la ventana que `focus` recordó antes de que el panel
+tomara el foco, y pidiéndole `Folder2::Self_().Path()`.
+
+**No se usa `LocationURL`**, que sería bastante menos COM. Medido en este equipo:
+una carpeta llamada `Año de prueba 2026` sale como `A%F1o...`, codificada con la
+página de códigos ANSI y no en UTF-8; otra llamada `Prueba λ 📁` sale con esos
+caracteres **literales, sin codificar**. Las dos formas en la misma cadena y sin
+nada que distinga cuál es cuál. `Path()` devuelve UTF-16 exacto en los dos casos.
+
+### Sus límites
+
+- Solo ventanas del **Explorador**. Un gestor de archivos de otra marca o un cuadro
+  de «Abrir/Guardar» no están en esa lista de COM.
+- «Este equipo», la papelera y el Panel de control son carpetas para el shell, pero
+  su ruta es un identificador que no se puede abrir: se rechazan.
+- La sustitución llega a `app`, `path`, `script`, `text` y a los pasos de una macro.
+  Las direcciones web quedan fuera a propósito: ahí una ruta tendría que ir
+  codificada.
+- Un `script` de tipo CMD recibe su comando tal cual: una carpeta con `&` en el
+  nombre lo partiría en dos. Para esos casos usa PowerShell con la ruta
+  entrecomillada en los argumentos.
+
 ## Perfiles por aplicación
 
 El panel cambia de teclas según la aplicación que tengas delante, como los
