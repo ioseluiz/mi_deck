@@ -449,3 +449,16 @@ textarea {
   gap: 4px;
   align-items: flex-start;
 }
+
+/* Las dos filas de la rueda reusan .paso; solo cambia la etiqueta del sentido. */
+.paso-dir {
+  flex: 0 0 62px;
+  color: var(--texto-tenue);
+  font-size: 11.5px;
+}
+
+#ed-rueda-filas:empty::after {
+  content: "Marca la casilla para darle rueda a esta tecla.";
+  color: var(--texto-tenue);
+  font-size: 11.5px;
+}

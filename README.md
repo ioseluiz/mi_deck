@@ -483,6 +483,48 @@ las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
 
+## La rueda del ratón sobre una tecla
+
+Girar la rueda encima de una tecla puede subir y bajar algo sin pulsar nada. Es el
+dial de una consola, en software — y es lo único de esta lista que un Stream Deck
+no puede hacer sin comprarle el modelo con ruedas.
+
+Se activa por tecla, en el editor, con una acción por sentido:
+
+```json
+{ "wheel": {
+  "up":   { "type": "system", "command": "volume_up" },
+  "down": { "type": "system", "command": "volume_down" }
+} }
+```
+
+Las teclas con rueda llevan una **marca `↕` en la esquina**: una rueda que no se ve
+no la usa nadie.
+
+### El reparto con el paginador
+
+La rueda sobre la rejilla ya cambiaba de página, y eso se conserva: sobre una tecla
+**con** rueda la gira, y sobre cualquier otra cosa cambia de página. El reparto vive
+dentro del mismo manejador a propósito — con dos manejadores, el de la tecla no
+podría evitar que el de la página se disparara también, y girar el volumen cambiaría
+de página a la vez.
+
+### Por qué se cuenta el delta y no los eventos
+
+Una vuelta de rueda son decenas de eventos en medio segundo. Se agrupan en una sola
+llamada cada 60 ms con un contador de muescas, **hasta diez por tanda**: cada muesca
+es un proceso o una entrada sintética, y más de eso no se nota en pantalla pero sí en
+la máquina.
+
+El contador suma `deltaY` y lo divide por la unidad más pequeña del gesto, en vez de
+contar eventos. Contar eventos sería más simple pero solo vale para una rueda: un
+panel táctil de precisión manda muchos eventos de delta pequeño en lugar de muescas
+enteras, y contarlos uno a uno dispararía la acción decenas de veces por un gesto
+corto.
+
+Medido con un archivo por muesca: una muesca da una, cinco seguidas a 25 ms dan
+cinco, y diez a 8 ms dan diez. Ni una perdida.
+
 ## Macros
 
 Una tecla, varios pasos en orden. Es lo que hace falta para automatizar una

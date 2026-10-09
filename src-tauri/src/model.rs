@@ -213,6 +213,12 @@ pub struct DeckButton {
     pub icon: Icon,
     #[serde(deserialize_with = "accion_tolerante")]
     pub action: Action,
+    /// Que hace la rueda del raton sobre esta tecla.
+    ///
+    /// Es la respuesta en software al dial de una consola: subir y bajar algo sin
+    /// pulsar nada. Vacio en casi todas las teclas, por eso no se serializa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wheel: Option<Rueda>,
     /// Lo que esta version no conoce de la tecla, conservado tal cual.
     ///
     /// `Deck` y `Settings` ya tenian esta red; la tecla era el unico sitio sin
@@ -222,6 +228,19 @@ pub struct DeckButton {
     /// la tecla de todo lo que no entendiera.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Lo que hace la rueda sobre una tecla, en cada sentido.
+///
+/// Las dos acciones son obligatorias: una rueda que solo sube es un boton con un
+/// gesto raro, no una rueda, y quien la girara hacia el otro lado no entenderia
+/// por que no pasa nada.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Rueda {
+    #[serde(deserialize_with = "accion_tolerante")]
+    pub up: Action,
+    #[serde(deserialize_with = "accion_tolerante")]
+    pub down: Action,
 }
 
 // -------------------------------------------------------------------- iconos
@@ -482,6 +501,61 @@ mod tests_tolerancia {
         assert!(vuelta.get("states").is_some(), "se perdio `states`");
         assert!(vuelta.get("live").is_some(), "se perdio `live`");
         assert_eq!(vuelta["live"]["type"], "micro_silenciado");
+    }
+
+    #[test]
+    fn una_rueda_se_lee_y_se_vuelve_a_escribir() {
+        let crudo = r#"{
+            "id": "b1",
+            "position": 0,
+            "label": "Volumen",
+            "icon": { "type": "auto" },
+            "action": { "type": "system", "command": "volume_mute" },
+            "wheel": {
+                "up":   { "type": "system", "command": "volume_up" },
+                "down": { "type": "system", "command": "volume_down" }
+            }
+        }"#;
+
+        let tecla: DeckButton = serde_json::from_str(crudo).expect("deberia leerse");
+        let rueda = tecla.wheel.as_ref().expect("deberia tener rueda");
+        assert!(matches!(rueda.up, Action::System { .. }));
+        assert!(matches!(rueda.down, Action::System { .. }));
+
+        let vuelta = serde_json::to_value(&tecla).unwrap();
+        assert_eq!(vuelta["wheel"]["up"]["command"], "volume_up");
+    }
+
+    #[test]
+    fn una_rueda_con_una_accion_que_esta_version_no_entiende_no_tumba_la_tecla() {
+        // La rueda usa el mismo deserializador tolerante que la accion de la
+        // tecla: si no lo usara, un sentido desconocido se llevaria la tecla
+        // entera, que es el accidente que `accion_tolerante` existe para evitar.
+        let crudo = r#"{
+            "id": "b1", "position": 0, "label": "X",
+            "icon": { "type": "auto" },
+            "action": { "type": "hotkey", "keys": "Ctrl+S" },
+            "wheel": {
+                "up":   { "type": "invento_futuro", "x": 1 },
+                "down": { "type": "system", "command": "volume_down" }
+            }
+        }"#;
+
+        let tecla: DeckButton = serde_json::from_str(crudo).expect("deberia leerse");
+        let rueda = tecla.wheel.as_ref().unwrap();
+        assert!(matches!(rueda.up, Action::Unknown { .. }));
+        assert!(matches!(rueda.down, Action::System { .. }));
+
+        // Y al guardar sigue ahi, envuelta: el objeto original queda bajo
+        // `__original` para que una version que lo entienda lo recupere, que es
+        // justo lo que hace `accion_tolerante` al leer.
+        let vuelta = serde_json::to_value(&tecla).unwrap();
+        assert_eq!(vuelta["wheel"]["up"]["type"], "unknown");
+        assert_eq!(
+            vuelta["wheel"]["up"]["__original"]["type"],
+            "invento_futuro"
+        );
+        assert_eq!(vuelta["wheel"]["up"]["__original"]["x"], 1);
     }
 
     #[test]

@@ -280,6 +280,7 @@ mod tests {
                 action: Action::Folder {
                     surface: to.to_string(),
                 },
+                wheel: None,
                 extra: Default::default(),
             });
         }

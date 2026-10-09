@@ -291,6 +291,89 @@ const TIPOS_DE_PASO = [
   { tipo: "script", etiqueta: "Script", pista: "Get-Date" },
 ];
 
+/**
+ * Los dos sentidos de la rueda de esta tecla, o null si no tiene.
+ *
+ * Misma forma plana que `PASOS` y por el mismo motivo: repintar la lista entera
+ * es mas simple que actualizar nodos, asi que el estado no puede vivir en el DOM.
+ *
+ * @type {{arriba: {tipo: string, valor: string, original?: any}, abajo: {tipo: string, valor: string, original?: any}} | null}
+ */
+let RUEDA = null;
+
+/** Pinta las dos filas de la rueda, si la tecla la tiene. */
+function pintarRueda() {
+  const cont = $("ed-rueda-filas");
+  $("ed-rueda-on").checked = Boolean(RUEDA);
+  if (!RUEDA) {
+    cont.innerHTML = "";
+    return;
+  }
+  cont.innerHTML = [
+    ["arriba", "Al subir"],
+    ["abajo", "Al bajar"],
+  ]
+    .map(([dir, etiqueta]) => {
+      const f = RUEDA[dir];
+      const tipos = TIPOS_DE_PASO.map(
+        (t) =>
+          `<option value="${t.tipo}"${t.tipo === f.tipo ? " selected" : ""}>` +
+          `${escapar(t.etiqueta)}</option>`
+      ).join("");
+      const campo =
+        f.tipo === "system"
+          ? `<select data-campo="valor">${opcionesSistema(f.valor)}</select>`
+          : `<input data-campo="valor" type="text" value="${escapar(f.valor)}" ` +
+            `placeholder="${escapar(pistaDe(f.tipo))}">`;
+      return (
+        `<div class="paso" data-dir="${dir}">` +
+        `<span class="paso-dir">${escapar(etiqueta)}</span>` +
+        `<select data-campo="tipo">${tipos}</select>` +
+        campo +
+        `</div>`
+      );
+    })
+    .join("");
+}
+
+/** Lo que espera Rust, o null si la tecla no tiene rueda. */
+function ruedaAModelo() {
+  if (!RUEDA) return null;
+  return {
+    up: accionDePaso(RUEDA.arriba),
+    down: accionDePaso(RUEDA.abajo),
+  };
+}
+
+/** Del modelo a la forma plana de las dos filas. */
+function ruedaDesdeModelo(w) {
+  if (!w) return null;
+  const plana = (a) => {
+    const v =
+      a?.type === "hotkey"
+        ? a.keys ?? ""
+        : a?.type === "text"
+          ? a.text ?? ""
+          : a?.type === "system"
+            ? a.command ?? ""
+            : a?.target ?? "";
+    return {
+      tipo: TIPOS_DE_PASO.some((t) => t.tipo === a?.type) ? a.type : "system",
+      valor: String(v),
+      original: a,
+    };
+  };
+  return { arriba: plana(w.up), abajo: plana(w.down) };
+}
+
+/** La rueda recien activada: subir y bajar el volumen, que es su caso de manual. */
+function ruedaPorDefecto() {
+  return {
+    arriba: { tipo: "system", valor: "volume_up" },
+    abajo: { tipo: "system", valor: "volume_down" },
+  };
+}
+
 /** Pinta la lista de pasos desde `PASOS`. */
 function pintarPasos() {
   const cont = $("ed-macro-pasos");
@@ -444,6 +527,9 @@ function volcarEnFormulario() {
   PASOS = tipo === "macro" ? pasosDesdeModelo(a.steps) : [];
   pintarPasos();
 
+  RUEDA = ruedaDesdeModelo(tecla.wheel);
+  pintarRueda();
+
   if (tipo === "system" && a.command) $("ed-system-command").value = a.command;
   mostrarAvisoSistema();
   prepararDesconocida(tipo, a);
@@ -553,6 +639,12 @@ function leerFormulario() {
   }
   tecla.icon.fit = $("ed-fit").value;
   tecla.icon.label_style = $("ed-labelstyle").value;
+
+  // Sin rueda se quita el campo del todo, para no dejar un `null` en deck.json
+  // que no significa nada.
+  const rueda = ruedaAModelo();
+  if (rueda) tecla.wheel = rueda;
+  else delete tecla.wheel;
 }
 
 /**
@@ -1014,6 +1106,31 @@ function conectar() {
     sincronizarListaApps();
     leerFormulario();
     refrescarIconoAuto();
+    pintarPrevia();
+  });
+
+  $("ed-rueda-on").addEventListener("change", (ev) => {
+    RUEDA = ev.target.checked ? ruedaPorDefecto() : null;
+    pintarRueda();
+    leerFormulario();
+    pintarPrevia();
+  });
+
+  // Delegado, como los pasos de macro: cambiar de tipo repinta las dos filas.
+  $("ed-rueda-filas").addEventListener("input", (ev) => {
+    const campo = ev.target?.getAttribute?.("data-campo");
+    const dir = ev.target.closest("[data-dir]")?.getAttribute("data-dir");
+    if (!campo || !dir || !RUEDA?.[dir]) return;
+
+    if (campo === "valor") RUEDA[dir].valor = ev.target.value;
+    else if (campo === "tipo") {
+      RUEDA[dir].tipo = ev.target.value;
+      // Lo escrito para un atajo no significa nada como ruta.
+      RUEDA[dir].valor = "";
+      delete RUEDA[dir].original;
+      pintarRueda();
+    }
+    leerFormulario();
     pintarPrevia();
   });
 

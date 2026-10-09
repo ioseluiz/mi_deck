@@ -243,6 +243,52 @@ fn run_action(
 /// ser cualquier accion de MiDeck sin ningun caso especial**.
 ///
 /// Devuelve el aviso que haya que mostrar, si lo hay.
+/// Ejecuta lo que la rueda tenga asignado en una tecla.
+///
+/// Va por su propio comando y no por `run_action` porque son gestos distintos:
+/// la rueda ni arma una tecla peligrosa ni navega a una carpeta, y repite muchas
+/// veces seguidas. Una tecla sin rueda falla en voz alta: si el panel la llama es
+/// que se ha desincronizado del deck, y callarlo lo volveria imposible de ver.
+#[tauri::command]
+fn run_wheel(
+    app: AppHandle,
+    button_id: String,
+    arriba: bool,
+    veces: u32,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let accion = {
+        let deck = state.deck.lock().unwrap();
+        let boton = buscar_boton(&deck, &button_id)
+            .ok_or_else(|| format!("No existe el boton {button_id} en el deck."))?;
+        let rueda = boton
+            .wheel
+            .as_ref()
+            .ok_or_else(|| format!("La tecla «{}» no tiene rueda.", boton.label))?;
+        if arriba {
+            rueda.up.clone()
+        } else {
+            rueda.down.clone()
+        }
+    };
+
+    // El tope existe porque la rueda llega en rafagas: una vuelta rapida son
+    // decenas de muescas, y cada una aqui es un proceso o una entrada sintetica.
+    // Mas de este puñado por llamada no se nota en la pantalla y si en la maquina.
+    let veces = veces.clamp(1, 10);
+    let accion = explorador::con_variables(accion, explorador::carpeta_disponible)?;
+    let spec = launcher::build_launch(&accion).map_err(|e| e.to_string())?;
+
+    if matches!(spec, launcher::LaunchSpec::Navigate { .. }) {
+        return Err("La rueda no puede entrar en una carpeta.".to_string());
+    }
+
+    for _ in 0..veces {
+        ejecutar_spec(&app, &state, &spec)?;
+    }
+    Ok(())
+}
+
 fn ejecutar_spec(
     app: &AppHandle,
     state: &State<AppState>,
@@ -484,6 +530,19 @@ fn set_autostart(value: bool, app: AppHandle, state: State<AppState>) -> Result<
     let mut deck = state.deck.lock().unwrap();
     deck.settings.start_with_windows = value;
     store::save(&deck, &state.config_path).map_err(|e| e.to_string())
+}
+
+/// La tecla entera, no solo su accion.
+///
+/// `find_action` se queda corta en cuanto hace falta algo mas de la tecla, y
+/// clonar la accion para luego volver a buscarla seria recorrer el deck dos veces.
+fn buscar_boton<'a>(deck: &'a Deck, button_id: &str) -> Option<&'a model::DeckButton> {
+    deck.surfaces.values().find_map(|surface| {
+        surface
+            .pages
+            .iter()
+            .find_map(|page| page.buttons.iter().find(|b| b.id == button_id))
+    })
 }
 
 fn find_action(deck: &Deck, button_id: &str) -> Option<Action> {
@@ -986,6 +1045,7 @@ fn drop_paths(
                 // Una imagen soltada se convierte en la cara de su propia tecla.
                 icon: images::icono_para(p),
                 action,
+                wheel: None,
                 extra: Default::default(),
             };
             edit::upsert_button(deck, &surface_id, page, boton)?;
@@ -1020,6 +1080,7 @@ fn drop_url(
                 browser: "default".to_string(),
                 profile: None,
             },
+            wheel: None,
             extra: Default::default(),
         };
         edit::upsert_button(deck, &surface_id, page, boton)
@@ -1500,6 +1561,7 @@ pub fn run() {
             get_deck,
             reload_deck,
             run_action,
+            run_wheel,
             save_window_pos,
             set_window_level,
             set_lock_position,

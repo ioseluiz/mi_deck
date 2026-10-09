@@ -263,6 +263,9 @@ export function render(contenedor, nav, ctx) {
     const icon = b.icon ?? {};
     const clases = ["key"];
     if (b.action?.type === "folder") clases.push("key--carpeta");
+    // Una rueda que no se ve no la usa nadie: la marca de la esquina es lo unico
+    // que distingue una tecla que responde al giro de una que no.
+    if (b.wheel) clases.push("key--rueda");
     if (icon.fit === "cover") clases.push("key--cover");
     if (icon.label_style === "overlay") clases.push("key--label-overlay");
     if (icon.label_style === "none") clases.push("key--label-none");

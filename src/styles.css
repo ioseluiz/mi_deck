@@ -592,3 +592,16 @@ body {
   overflow-wrap: anywhere;
   user-select: text;
 }
+
+/* Marca de rueda: dos flechitas en la esquina de arriba a la izquierda.
+   Con forma y no solo con color, igual que la esquina doblada de una carpeta. */
+.key--rueda::before {
+  content: "95";
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: calc(var(--key) * 0.13);
+  line-height: 1;
+  color: var(--texto-tenue);
+  pointer-events: none;
+}

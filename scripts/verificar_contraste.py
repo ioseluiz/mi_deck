@@ -36,6 +36,9 @@ EXIGENCIAS = [
     # que distinguirse de una tecla normal sin depender solo del tono, porque
     # quien no distingue el rojo necesita verlo igual.
     ("borde de tecla armada sobre el panel", "--armada-borde", "--fondo", 3.0),
+    # La marca de rueda en la esquina de una tecla: es un grafico de interfaz,
+    # asi que 3:1 sobre la superficie de la tecla (WCAG 1.4.11).
+    ("marca de rueda sobre la tecla", "--texto-tenue", "--tecla", 3.0),
     # El aviso de arranque roto: se lee sobre su propio fondo y su borde se ve
     # sobre el panel. Es lo unico que queda en pantalla cuando nada funciona.
     ("texto de arranque roto sobre su fondo", "#ffd9dc", "#2a1d1f", 4.5),

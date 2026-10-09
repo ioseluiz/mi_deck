@@ -270,6 +270,25 @@
               carpeta nueva, usa el menú del clic derecho sobre una celda vacía.
             </p>
           </div>
+
+          <!-- Fuera de los grupos: la rueda vale para cualquier tipo de tecla.
+               Y sin data-tipo, que mostrarGrupo lo ocultaria por su cuenta. -->
+          <h2>Rueda del ratón</h2>
+          <label class="check">
+            <input id="ed-rueda-on" type="checkbox" />
+            <span>Girar la rueda sobre esta tecla hace algo</span>
+          </label>
+          <div id="ed-rueda-filas" class="pasos"></div>
+          <p class="nota">
+            Es el dial de una consola, en software: subir y bajar algo sin pulsar.
+            Con la rueda puesta, girarla sobre esta tecla ya <em>no</em> cambia de
+            página; sobre cualquier otra, sí.
+          </p>
+          <p class="nota">
+            Una vuelta rápida son muchas muescas: se agrupan y se ejecutan juntas,
+            hasta diez por tanda, para no disparar un proceso por cada clic de la
+            rueda.
+          </p>
         </section>
 
         <!-- ---------------------------------------------- cara de la tecla -->

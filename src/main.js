@@ -283,6 +283,60 @@ function volver() {
   if (nav?.back()) pintar("atras");
 }
 
+/**
+ * Muescas de rueda pendientes, agrupadas antes de molestar a Rust.
+ *
+ * Una vuelta de rueda son decenas de eventos en medio segundo. Llamar una vez por
+ * muesca lanzaria decenas de entradas sinteticas y las respuestas llegarian
+ * desordenadas; juntarlas en una llamada con un contador sale igual de fino en
+ * pantalla y no castiga la maquina.
+ */
+let ruedaPendiente = null;
+let temporizadorRueda = 0;
+
+/**
+ * @param {string} botonId
+ * @param {boolean} arriba
+ * @param {number} delta Magnitud del evento, que no siempre es una sola muesca.
+ */
+function acumularRueda(botonId, arriba, delta) {
+  // Cambiar de tecla o de sentido vacia lo acumulado: mezclar dos sentidos en una
+  // llamada daria un resultado que no se corresponde con el gesto.
+  if (
+    ruedaPendiente &&
+    (ruedaPendiente.botonId !== botonId || ruedaPendiente.arriba !== arriba)
+  ) {
+    enviarRueda();
+  }
+  // Se suma el delta y se recuerda el mas pequeno visto, que es lo que vale una
+  // muesca en este dispositivo. Contar eventos seria mas simple pero no vale para
+  // todos: un panel tactil de precision manda muchos eventos de delta pequeno en
+  // vez de muescas enteras, y contarlos como muescas dispararia la accion decenas
+  // de veces por un gesto corto. Normalizar por la unidad mas pequena del gesto
+  // sale igual de exacto con una rueda y correcto con un panel tactil.
+  ruedaPendiente = ruedaPendiente ?? { botonId, arriba, total: 0, unidad: Infinity };
+  ruedaPendiente.total += delta || 1;
+  ruedaPendiente.unidad = Math.min(ruedaPendiente.unidad, delta || 1);
+
+  if (temporizadorRueda) return;
+  temporizadorRueda = setTimeout(enviarRueda, 60);
+}
+
+function enviarRueda() {
+  clearTimeout(temporizadorRueda);
+  temporizadorRueda = 0;
+  const pendiente = ruedaPendiente;
+  ruedaPendiente = null;
+  if (!pendiente) return;
+
+  const veces = Math.max(1, Math.round(pendiente.total / pendiente.unidad));
+  invoke("run_wheel", {
+    buttonId: pendiente.botonId,
+    arriba: pendiente.arriba,
+    veces,
+  }).catch((e) => aviso(String(e)));
+}
+
 /** @param {string} botonId */
 async function pulsar(botonId) {
   // Apagar o vaciar la papelera por un clic de mas no tiene vuelta atras. La
@@ -346,11 +400,26 @@ function conectarEventos() {
     if (nav?.movePage(1)) pintar("adelante");
   });
 
-  // La rueda sobre la rejilla cambia de pagina.
+  // La rueda: sobre una tecla con rueda, la gira; sobre cualquier otra cosa de la
+  // rejilla, cambia de pagina, que es lo que hacia siempre.
+  //
+  // El reparto va dentro del mismo manejador a proposito. Con dos manejadores, el
+  // de la tecla no podria evitar que el de la pagina se disparara tambien, y girar
+  // el volumen cambiaria de pagina a la vez.
   $grid.addEventListener(
     "wheel",
     (ev) => {
-      const delta = ev.deltaY > 0 ? 1 : -1;
+      const arriba = ev.deltaY < 0;
+      const id = /** @type {HTMLElement} */ (ev.target)
+        ?.closest?.("[data-boton]")
+        ?.getAttribute("data-boton");
+      const tecla = id ? nav?.buttons?.find((b) => b.id === id) : null;
+
+      if (tecla?.wheel) {
+        acumularRueda(id, arriba, Math.abs(ev.deltaY));
+        return;
+      }
+      const delta = arriba ? -1 : 1;
       if (nav?.movePage(delta)) pintar(delta > 0 ? "adelante" : "atras");
     },
     { passive: true }

@@ -189,6 +189,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Path {
                             target: "%USERPROFILE%".into(),
                         },
+                        wheel: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -202,6 +203,7 @@ pub fn default_deck() -> Deck {
                             workdir: String::new(),
                             focus_if_running: false,
                         },
+                        wheel: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -217,6 +219,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Folder {
                             surface: "s-ejemplos".into(),
                         },
+                        wheel: None,
                         extra: Default::default(),
                     },
                 ],
@@ -240,6 +243,7 @@ pub fn default_deck() -> Deck {
                             browser: "default".into(),
                             profile: None,
                         },
+                        wheel: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -255,6 +259,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Path {
                             target: "%USERPROFILE%\\Downloads".into(),
                         },
+                        wheel: None,
                         extra: Default::default(),
                     },
                     DeckButton {
@@ -273,6 +278,7 @@ pub fn default_deck() -> Deck {
                             args: String::new(),
                             hidden: false,
                         },
+                        wheel: None,
                         extra: Default::default(),
                     },
                 ],
