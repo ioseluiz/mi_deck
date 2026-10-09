@@ -631,6 +631,11 @@ nada que distinga cuál es cuál. `Path()` devuelve UTF-16 exacto en los dos cas
 - La sustitución llega a `app`, `path`, `script`, `text` y a los pasos de una macro.
   Las direcciones web quedan fuera a propósito: ahí una ruta tendría que ir
   codificada.
+- **`script` ejecuta un comando, no abre una consola.** Una tecla de tipo `script`
+  cuyo comando sea `%CARPETA%` intenta ejecutar la carpeta y falla; para abrir una
+  consola *dentro* de ella, la acción es `app` con la carpeta de trabajo. MiDeck
+  rechaza ese caso antes de arrancar nada y lo dice en la tecla, porque si no el
+  error se va con la consola al cerrarse y solo se ve un parpadeo.
 - Un `script` de tipo CMD recibe su comando tal cual: una carpeta con `&` en el
   nombre lo partiría en dos. Para esos casos usa PowerShell con la ruta
   entrecomillada en los argumentos.

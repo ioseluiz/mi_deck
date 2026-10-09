@@ -581,6 +581,24 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             if target.trim().is_empty() {
                 return Err(LaunchError::Empty { kind: "script" });
             }
+
+            // Una carpeta no es un comando. El interprete intenta ejecutarla,
+            // falla, y como la consola se cierra sola lo unico que se ve es un
+            // parpadeo: el error se va con la ventana. Mejor no arrancar y
+            // decirlo en la tecla, que es donde se lee.
+            //
+            // Pasa de verdad con una tecla de script cuyo comando es %CARPETA%,
+            // que es la forma natural de equivocarse al querer "abrir una
+            // consola aqui". Es la unica vez que esta funcion mira el disco, y
+            // vale la pena: la alternativa es un fallo invisible.
+            if Path::new(&target).is_dir() {
+                return Err(LaunchError::Invalid {
+                    motivo: format!(
+                        "«{target}» es una carpeta, no un script ni un comando. Para abrir                          una consola dentro de ella, usa una accion Aplicacion con                          powershell.exe y esa carpeta en «Carpeta de trabajo»."
+                    ),
+                });
+            }
+
             let extra = split_args(&expand_env(args));
             let bajo = target.to_ascii_lowercase();
 
@@ -909,6 +927,43 @@ fn open_with_shell(target: &str) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::model::{Action, Shell};
+
+    #[test]
+    fn una_carpeta_no_es_un_comando() {
+        // La tecla "abrir una consola aqui" escrita como script con %CARPETA%:
+        // el interprete intenta ejecutar la carpeta, falla, y la consola se
+        // cierra antes de que nadie lea el error. Mejor no arrancar.
+        let carpeta = std::env::temp_dir();
+        let accion = Action::Script {
+            shell: Shell::Powershell,
+            target: carpeta.display().to_string(),
+            args: String::new(),
+            hidden: false,
+        };
+
+        let e = build_launch(&accion).unwrap_err().to_string();
+        assert!(
+            e.contains("carpeta"),
+            "deberia decir que es una carpeta: {e}"
+        );
+        assert!(
+            e.contains("Carpeta de trabajo"),
+            "deberia decir como se hace bien: {e}"
+        );
+    }
+
+    #[test]
+    fn un_script_de_verdad_sigue_pasando() {
+        // El rechazo solo mira si es un directorio: un comando suelto, que no
+        // existe en disco, no puede verse afectado.
+        let accion = Action::Script {
+            shell: Shell::Powershell,
+            target: "Get-Date".to_string(),
+            args: String::new(),
+            hidden: false,
+        };
+        assert!(build_launch(&accion).is_ok());
+    }
 
     #[cfg(windows)]
     #[test]
