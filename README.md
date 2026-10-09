@@ -532,6 +532,11 @@ cualquier acción completa en un paso, pero un formulario con todos los campos d
 cada tipo dentro de cada fila sería ilegible; quien necesite argumentos o un
 perfil de navegador puede escribirlo en `deck.json`, que lo acepta igual.
 
+Y lo que la fila no enseña **sobrevive a abrir la macro y guardarla**: el editor
+parte de la acción que había y solo pisa el campo que esa fila edita. Antes la
+reconstruía desde cero, así que una carpeta de trabajo escrita a mano se perdía al
+primer paso por el editor, que es la peor forma de perderla: sin tocarla.
+
 **Una macro teclea sobre lo que tenga el foco.** Si una pausa se queda corta, lo
 que escriba acaba en otro sitio. El editor lo advierte.
 

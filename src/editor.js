@@ -345,27 +345,34 @@ function pasosAModelo() {
 
 function accionDePaso(p) {
   const v = String(p.valor ?? "");
+
+  // Si la fila sigue siendo del mismo tipo que tenia, se parte de la accion
+  // original y solo se pisa el campo que esta fila edita. Asi sobrevive lo que el
+  // formulario no ensena. Si el usuario cambia el tipo, no hay nada que conservar.
+  const previa = p.original && p.original.type === p.tipo ? { ...p.original } : null;
+  const conservando = (campos) => (previa ? { ...previa, ...campos } : campos);
+
   switch (p.tipo) {
     case "hotkey":
-      return { type: "hotkey", keys: v.trim() };
+      return conservando({ type: "hotkey", keys: v.trim() });
     case "text":
-      return { type: "text", text: v };
+      return conservando({ type: "text", text: v });
     case "system":
-      return { type: "system", command: v };
+      return conservando({ type: "system", command: v });
     case "url":
-      return { type: "url", target: v.trim(), browser: "default", profile: null };
+      return conservando({ type: "url", target: v.trim(), browser: "default", profile: null });
     case "path":
-      return { type: "path", target: v.trim() };
+      return conservando({ type: "path", target: v.trim() });
     case "script":
-      return { type: "script", shell: "powershell", target: v.trim(), args: "", hidden: false };
+      return conservando({ type: "script", shell: "powershell", target: v.trim(), args: "", hidden: false });
     case "app":
-      return {
+      return conservando({
         type: "app",
         target: v.trim(),
         args: "",
         workdir: "",
         focus_if_running: false,
-      };
+      });
     default:
       // Igual que en leerFormulario: un tipo sin case no puede pasar callado.
       throw new Error(`Paso de tipo no contemplado: ${p.tipo}`);
@@ -388,6 +395,10 @@ function pasosDesdeModelo(steps) {
       tipo: TIPOS_DE_PASO.some((t) => t.tipo === a.type) ? a.type : "hotkey",
       valor: String(valor),
       pausa: Number(s.delay_ms) || 0,
+      // Se guarda la accion tal como venia para no perder al guardar lo que esta
+      // fila no ensena: la carpeta de trabajo, los argumentos o la marca de traer
+      // al frente. Abrir una macro y guardarla no puede vaciarle campos.
+      original: a,
     };
   });
 }
