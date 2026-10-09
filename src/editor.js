@@ -68,10 +68,20 @@ const CON_ICONO_PROPIO = new Set(["app", "path", "script"]);
 
 // ------------------------------------------------------------------- utiles
 
-function error(msg) {
+/**
+ * Pinta el aviso de la parte de abajo.
+ *
+ * Admite tono porque no todo lo que hay que decir es un fallo: «perfil
+ * importado» en rojo asusta sin motivo.
+ *
+ * @param {string} msg
+ * @param {"error" | "info"} [tono]
+ */
+function error(msg, tono = "error") {
   const el = $("ed-error");
   el.textContent = msg ?? "";
   el.hidden = !msg;
+  el.classList.toggle("error--info", tono === "info");
 }
 
 function escapar(s) {
@@ -623,17 +633,51 @@ async function cargarPerfiles() {
     .map((p) => {
       const clases = p.enabled ? "perfil" : "perfil perfil--apagado";
       const teclas = p.teclas === 1 ? "1 tecla" : `${p.teclas} teclas`;
+      // Un ejecutable solo se puede quitar si hay otro: el ultimo dejaria el
+      // perfil sin forma de activarse. El boton no se pinta en vez de pintarse y
+      // dar un error, que es mas honesto que ofrecer algo que no se puede hacer.
+      const sobran = p.exes.length > 1;
+      // Copiar desde otro perfil solo tiene sentido si hay otro.
+      const otros = perfiles
+        .filter((q) => q.id !== p.id)
+        .map((q) => `<option value="${escapar(q.id)}">${escapar(q.nombre)}</option>`)
+        .join("");
+      const fichas = p.exes
+        .map(
+          (e) =>
+            `<span class="ficha">${escapar(e)}` +
+            (sobran
+              ? `<button type="button" data-accion="quitar-exe" data-exe="${escapar(e)}" ` +
+                `title="Quitar ${escapar(e)} de este perfil">×</button>`
+              : "") +
+            `</span>`
+        )
+        .join("");
       return (
         `<div class="${clases}" data-perfil="${escapar(p.id)}">` +
         `<label class="check" title="Activar o desactivar sin perder las teclas">` +
         `<input type="checkbox" data-accion="activar"${p.enabled ? " checked" : ""}>` +
         `</label>` +
         `<span class="perfil-datos">` +
-        `<span class="perfil-nombre">${escapar(p.nombre || "(sin nombre)")}</span> ` +
-        `<span class="perfil-exe">${escapar(p.exes.join(", "))}</span>` +
-        `<br><span class="perfil-exe">${teclas}</span>` +
+        `<input class="perfil-nombre" data-accion="nombre" value="${escapar(p.nombre)}" ` +
+        `title="El nombre del panel de este perfil">` +
+        `<span class="perfil-fichas">${fichas}` +
+        `<input class="perfil-exe-nuevo" data-accion="exe-nuevo" placeholder="otro.exe" ` +
+        `title="Otro ejecutable con las mismas teclas">` +
         `</span>` +
+        `<span class="perfil-exe">${teclas}</span>` +
+        `</span>` +
+        `<span class="perfil-botones">` +
+        `<button type="button" data-accion="editar" ` +
+        `title="Enseñar este perfil en el panel aunque su aplicación no esté abierta">` +
+        `Editar teclas</button>` +
+        (otros
+          ? `<select data-accion="copiar-desde" title="Traer las teclas de otro perfil">` +
+            `<option value="">Copiar teclas de…</option>${otros}</select>`
+          : "") +
+        `<button type="button" data-accion="exportar">Exportar…</button>` +
         `<button type="button" data-accion="quitar">Quitar…</button>` +
+        `</span>` +
         `</div>`
       );
     })
@@ -1123,6 +1167,131 @@ function conectar() {
     } catch (e) {
       error(String(e));
     }
+  });
+
+  /** Llama a un comando de perfil y repinta. Un solo sitio para el mismo baile. */
+  async function tocarPerfil(comando, args) {
+    try {
+      error("");
+      pintarHuerfanas(await invoke(comando, args));
+      await invoke("notify_deck_changed");
+    } catch (e) {
+      error(String(e));
+    }
+    // Se repinta pase lo que pase: si fallo, el campo tiene que volver a lo que
+    // hay de verdad en el deck y no quedarse con lo que el usuario tecleo.
+    await cargarPerfiles();
+  }
+
+  $("aj-perfiles")?.addEventListener("change", async (ev) => {
+    const campo = ev.target;
+    if (campo?.getAttribute?.("data-accion") !== "nombre") return;
+    const id = campo.closest("[data-perfil]")?.getAttribute("data-perfil");
+    await tocarPerfil("rename_profile", { profileId: id, name: campo.value });
+  });
+
+  $("aj-perfiles")?.addEventListener("keydown", async (ev) => {
+    const campo = ev.target;
+    if (ev.key !== "Enter") return;
+    if (campo?.getAttribute?.("data-accion") === "exe-nuevo") {
+      ev.preventDefault();
+      const id = campo.closest("[data-perfil]")?.getAttribute("data-perfil");
+      if (!campo.value.trim()) return;
+      await tocarPerfil("add_profile_exe", { profileId: id, exe: campo.value.trim() });
+    } else if (campo?.getAttribute?.("data-accion") === "nombre") {
+      // Intro confirma sin tener que salir del campo.
+      ev.preventDefault();
+      campo.blur();
+    }
+  });
+
+  $("aj-perfiles")?.addEventListener("click", async (ev) => {
+    const boton = ev.target;
+    const accion = boton?.getAttribute?.("data-accion");
+    const id = boton?.closest?.("[data-perfil]")?.getAttribute("data-perfil");
+    if (!id) return;
+
+    if (accion === "editar") {
+      try {
+        error("");
+        await invoke("edit_profile_surface", { profileId: id });
+      } catch (e) {
+        error(String(e));
+      }
+      return;
+    }
+
+    if (accion === "exportar") {
+      try {
+        error("");
+        const sugerido = await invoke("export_profile_filename", { profileId: id });
+        const ruta = await invoke("plugin:dialog|save", {
+          options: {
+            title: "Guardar el perfil",
+            defaultPath: sugerido,
+            filters: [{ name: "Perfil de MiDeck", extensions: ["json"] }],
+          },
+        });
+        if (!ruta) return;
+        await invoke("export_profile", { profileId: id, path: String(ruta) });
+        error(`Perfil guardado en ${ruta}`, "info");
+      } catch (e) {
+        error(String(e));
+      }
+      return;
+    }
+  });
+
+  $("aj-perfiles")?.addEventListener("change", async (ev) => {
+    const campo = ev.target;
+    if (campo?.getAttribute?.("data-accion") !== "copiar-desde") return;
+    const desde = campo.value;
+    if (!desde) return;
+    const id = campo.closest("[data-perfil]")?.getAttribute("data-perfil");
+    try {
+      error("");
+      const r = await invoke("copy_profile_keys", { fromProfile: desde, toProfile: id });
+      pintarHuerfanas(r.deck);
+      await invoke("notify_deck_changed");
+      // Lo que no cupo se dice: perder teclas en silencio seria peor que no
+      // copiarlas.
+      error(
+        r.sin_sitio
+          ? `Teclas copiadas. ${r.sin_sitio} no cabían y se quedaron fuera: ` +
+              "haz sitio en el panel o usa otra página."
+          : "Teclas copiadas.",
+        "info"
+      );
+    } catch (e) {
+      error(String(e));
+    }
+    await cargarPerfiles();
+  });
+
+  $("aj-perfil-importar")?.addEventListener("click", async () => {
+    try {
+      error("");
+      const ruta = await invoke("plugin:dialog|open", {
+        options: {
+          title: "Abrir un perfil",
+          filters: [{ name: "Perfil de MiDeck", extensions: ["json"] }],
+        },
+      });
+      if (!ruta) return;
+      pintarHuerfanas(await invoke("import_profile", { path: String(ruta) }));
+      await invoke("notify_deck_changed");
+      await cargarPerfiles();
+      error("Perfil importado.", "info");
+    } catch (e) {
+      error(String(e));
+    }
+  });
+
+  $("aj-perfiles")?.addEventListener("click", async (ev) => {
+    const boton = ev.target;
+    if (boton?.getAttribute?.("data-accion") !== "quitar-exe") return;
+    const id = boton.closest("[data-perfil]")?.getAttribute("data-perfil");
+    await tocarPerfil("remove_profile_exe", { profileId: id, exe: boton.dataset.exe });
   });
 
   $("aj-perfiles")?.addEventListener("change", async (ev) => {

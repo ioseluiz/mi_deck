@@ -339,6 +339,11 @@ button.primario:hover {
   overflow-wrap: anywhere;
 }
 
+.error--info {
+  /* Lo que salio bien no se dice en rojo. */
+  color: #8fd19e;
+}
+
 .error[hidden] {
   display: none;
 }
@@ -357,4 +362,90 @@ textarea {
   border-radius: 3px;
   font-family: Consolas, monospace;
   font-size: 11px;
+}
+
+/* --- perfiles: nombre editable y fichas de ejecutable --- */
+
+.perfil-nombre {
+  font-weight: 600;
+  width: 100%;
+  /* Sin marco hasta que se toca: la fila se lee como una lista, no como un
+     formulario, pero el campo sigue estando donde se espera. */
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.perfil-nombre:hover {
+  border-color: #63666d;
+}
+
+.perfil-nombre:focus {
+  background: #0d0f13;
+  border-color: var(--acento);
+  outline: none;
+}
+
+.perfil-fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin: 4px 0 2px;
+}
+
+.ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #0d0f13;
+  border: 1px solid #676a71;
+  border-radius: 999px;
+  padding: 1px 4px 1px 8px;
+  font-size: 12px;
+}
+
+.ficha button {
+  border: none;
+  background: none;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+  border-radius: 999px;
+}
+
+.ficha button:hover {
+  color: var(--texto);
+  background: #63666d;
+}
+
+.perfil-exe-nuevo {
+  width: 9em;
+  font-size: 12px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px dashed #676a71;
+  border-radius: 999px;
+  color: inherit;
+  font-family: inherit;
+}
+
+.perfil-exe-nuevo:focus {
+  background: #0d0f13;
+  border-style: solid;
+  border-color: var(--acento);
+  outline: none;
+}
+
+.perfil-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
 }

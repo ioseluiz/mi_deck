@@ -13,6 +13,7 @@ pub mod focus;
 pub mod icons;
 pub mod images;
 pub mod integrity;
+pub mod intercambio;
 pub mod launcher;
 pub mod model;
 pub mod nivel;
@@ -629,6 +630,159 @@ fn create_profile(exe: String, name: String, state: State<AppState>) -> Result<D
 #[tauri::command]
 fn delete_profile(profile_id: String, state: State<AppState>) -> Result<DeckView, String> {
     mutar(&state, |d| edit::delete_profile(d, &profile_id))
+}
+
+/// Guarda un perfil en un archivo que se le puede pasar a otra persona.
+#[tauri::command]
+fn export_profile(
+    profile_id: String,
+    path: String,
+    state: State<AppState>,
+) -> Result<String, String> {
+    let paquete = {
+        let deck = state.deck.lock().unwrap();
+        intercambio::exportar(&deck, &profile_id, |archivo| {
+            std::fs::read(images::resolve(archivo)).ok()
+        })?
+    };
+
+    let json = serde_json::to_string_pretty(&paquete).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("No se pudo escribir {path}: {e}"))?;
+    Ok(path)
+}
+
+/// Nombre de archivo sugerido para el dialogo de guardar.
+#[tauri::command]
+fn export_profile_filename(profile_id: String, state: State<AppState>) -> String {
+    let deck = state.deck.lock().unwrap();
+    let nombre = deck
+        .profiles
+        .iter()
+        .find(|p| p.id == profile_id)
+        .and_then(|p| deck.surfaces.get(&p.surface))
+        .map(|s| s.name.as_str())
+        .unwrap_or("perfil");
+    intercambio::nombre_de_archivo(nombre)
+}
+
+/// Trae un perfil de un archivo y lo anade al deck.
+#[tauri::command]
+fn import_profile(path: String, state: State<AppState>) -> Result<DeckView, String> {
+    let bruto =
+        std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer {path}: {e}"))?;
+    // La misma cortesia que con deck.json: el Bloc de notas escribe BOM.
+    let paquete: intercambio::PerfilExportado = serde_json::from_str(store::sin_bom(&bruto))
+        .map_err(|e| format!("El archivo no es un perfil de MiDeck: {e}"))?;
+
+    mutar(&state, |d| {
+        intercambio::importar(d, &paquete, |bytes| images::import_bytes(bytes).ok()).map(|_| ())
+    })
+}
+
+/// Resultado de copiar teclas: ademas del deck, cuantas no cupieron.
+#[derive(serde::Serialize)]
+struct Copia {
+    deck: DeckView,
+    sin_sitio: usize,
+}
+
+/// Copia las teclas de un perfil a otro, sin tocar las que ya tuviera el destino.
+#[tauri::command]
+fn copy_profile_keys(
+    from_profile: String,
+    to_profile: String,
+    state: State<AppState>,
+) -> Result<Copia, String> {
+    let (desde, hasta) = {
+        let deck = state.deck.lock().unwrap();
+        let buscar = |id: &str| {
+            deck.profiles
+                .iter()
+                .find(|p| p.id == id)
+                .map(|p| p.surface.clone())
+                .ok_or_else(|| format!("No existe el perfil {id}"))
+        };
+        (buscar(&from_profile)?, buscar(&to_profile)?)
+    };
+
+    let mut sin_sitio = 0;
+    let deck = mutar(&state, |d| {
+        sin_sitio = edit::copy_keys(d, &desde, &hasta)?;
+        Ok(())
+    })?;
+    Ok(Copia { deck, sin_sitio })
+}
+
+/// Lo que el panel necesita para ensenar un perfil que nadie ha activado.
+#[derive(Clone, serde::Serialize)]
+struct PerfilAEditar {
+    surface: String,
+    nombre: String,
+}
+
+/// Lleva el panel al perfil indicado para poder editarle las teclas.
+///
+/// Hasta ahora a un perfil solo se llegaba teniendo su aplicacion delante: si la
+/// cerrabas, sus teclas quedaban fuera de alcance y habia que abrir el programa
+/// solo para retocar su panel. El panel se trae al frente porque el usuario
+/// acaba de pulsar un boton pidiendo justo eso.
+#[tauri::command]
+fn edit_profile_surface(
+    app: AppHandle,
+    profile_id: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let aviso = {
+        let deck = state.deck.lock().unwrap();
+        let perfil = deck
+            .profiles
+            .iter()
+            .find(|p| p.id == profile_id)
+            .ok_or_else(|| format!("No existe el perfil {profile_id}"))?;
+        let nombre = deck
+            .surfaces
+            .get(&perfil.surface)
+            .map(|s| s.name.clone())
+            .ok_or_else(|| "El perfil apunta a un panel que no existe.".to_string())?;
+        PerfilAEditar {
+            surface: perfil.surface.clone(),
+            nombre,
+        }
+    };
+
+    if let Some(panel) = app.get_webview_window("main") {
+        nivel::al_frente(&panel);
+    }
+    // Comando sincrono: ya corre en el hilo principal, que es donde un emit
+    // llega de verdad.
+    app.emit("editar-perfil", aviso).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn rename_profile(
+    profile_id: String,
+    name: String,
+    state: State<AppState>,
+) -> Result<DeckView, String> {
+    mutar(&state, |d| edit::rename_profile(d, &profile_id, &name))
+}
+
+#[tauri::command]
+fn add_profile_exe(
+    profile_id: String,
+    exe: String,
+    state: State<AppState>,
+) -> Result<DeckView, String> {
+    mutar(&state, |d| edit::add_profile_exe(d, &profile_id, &exe))
+}
+
+#[tauri::command]
+fn remove_profile_exe(
+    profile_id: String,
+    exe: String,
+    state: State<AppState>,
+) -> Result<DeckView, String> {
+    mutar(&state, |d| edit::remove_profile_exe(d, &profile_id, &exe))
 }
 
 #[tauri::command]
@@ -1382,6 +1536,14 @@ pub fn run() {
             create_profile,
             delete_profile,
             set_profile_enabled,
+            rename_profile,
+            edit_profile_surface,
+            copy_profile_keys,
+            export_profile,
+            export_profile_filename,
+            import_profile,
+            add_profile_exe,
+            remove_profile_exe,
             icon_for_target,
             notify_deck_changed
         ])

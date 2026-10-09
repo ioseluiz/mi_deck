@@ -55,6 +55,12 @@ EXIGENCIAS_EDITOR = [
     ("texto de campo sobre su fondo", "--texto", "#0d0f13", 4.5),
     ("texto de boton sobre el boton", "--texto", "#33363d", 4.5),
     ("marcador de posicion sobre su fondo", "#6b7076", "#0d0f13", 3.0),
+    # Las fichas de ejecutable de un perfil: su borde tiene que verse sobre la
+    # fila del perfil, que es mas clara que el fondo del editor.
+    ("borde de ficha sobre la fila del perfil", "#676a71", "#191c21", 3.0),
+    ("texto de ficha sobre su fondo", "--texto", "#0d0f13", 4.5),
+    # El aviso de que algo salio bien, sobre el fondo del editor.
+    ("aviso correcto sobre el fondo del editor", "#8fd19e", "#1c1f25", 4.5),
 ]
 
 

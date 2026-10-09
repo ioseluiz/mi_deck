@@ -69,6 +69,16 @@ let nivelActual = "top";
 let perfilActivo = { exe: null, surface: null, nombre: null };
 
 /**
+ * El perfil que el panel esta ensenando, que no siempre es el detectado.
+ *
+ * Con el ancla puesta son distintos: se sigue viendo el de antes mientras el
+ * sistema detecta otro. El ancla tiene que hablar del que se ve, no del que se
+ * detecta, o diria «perfil Word fijado» con las teclas de Excel delante. Y es lo
+ * que permite ensenar un perfil cuya aplicacion no esta abierta, para editarlo.
+ */
+let perfilMostrado = { surface: null, nombre: null };
+
+/**
  * Con el ancla puesta, el panel deja de seguir a la aplicacion en primer plano.
  *
  * Es estado de sesion y no se guarda: un ancla que sobrevive al reinicio deja a
@@ -133,20 +143,28 @@ function aplicarPerfil(payload) {
     surface: payload?.surface ?? null,
     nombre: payload?.nombre ?? null,
   };
-  pintarAncla();
-
   // Con el ancla puesta el panel deja de seguir a la aplicacion, pero el perfil
   // activo se sigue sabiendo: al soltarla se va al que toque sin esperar a que
   // cambies de ventana.
-  if (perfilFijado || !nav) return;
+  if (perfilFijado || !nav) {
+    pintarAncla();
+    return;
+  }
 
-  const destino = perfilActivo.surface ?? nav.deck.root;
-  if (nav.setBase(destino)) pintar();
+  mostrarPerfil(perfilActivo.surface, perfilActivo.nombre);
+}
+
+/** Lleva el panel a un perfil y deja constancia de cual se esta viendo. */
+function mostrarPerfil(surface, nombre) {
+  perfilMostrado = { surface: surface ?? null, nombre: nombre ?? null };
+  pintarAncla();
+  if (!nav) return;
+  if (nav.setBase(surface ?? nav.deck.root)) pintar();
 }
 
 /** El ancla solo existe cuando hay perfil, y su estado se lee de un vistazo. */
 function pintarAncla() {
-  const hay = Boolean(perfilActivo.surface);
+  const hay = Boolean(perfilMostrado.surface);
   $perfil.hidden = !hay;
   if (!hay) {
     // Sin perfil no hay nada que fijar: soltarla evita quedarse anclado a nada.
@@ -155,17 +173,16 @@ function pintarAncla() {
   }
   $perfil.setAttribute("aria-pressed", String(perfilFijado));
   $perfil.title = perfilFijado
-    ? `Perfil «${perfilActivo.nombre}» fijado (clic para soltarlo)`
-    : `Perfil «${perfilActivo.nombre}» (clic para fijarlo y que no cambie solo)`;
+    ? `Perfil «${perfilMostrado.nombre}» fijado (clic para soltarlo)`
+    : `Perfil «${perfilMostrado.nombre}» (clic para fijarlo y que no cambie solo)`;
 }
 
 /** Conmuta el ancla y vuelve al perfil que toque si se acaba de soltar. */
 function alternarAncla() {
   perfilFijado = !perfilFijado;
   pintarAncla();
-  if (!perfilFijado && nav) {
-    const destino = perfilActivo.surface ?? nav.deck.root;
-    if (nav.setBase(destino)) pintar();
+  if (!perfilFijado) {
+    mostrarPerfil(perfilActivo.surface, perfilActivo.nombre);
   }
   aviso(
     perfilFijado
@@ -684,6 +701,18 @@ function conectarEdicion() {
   // amortiguada, y con el perfil ya resuelto.
   ventana()
     .listen("perfil-activo", (ev) => aplicarPerfil(ev?.payload))
+    // Ajustes pide ensenar un perfil para editarlo. Se fija el ancla: su
+    // aplicacion no tiene por que estar abierta, y sin fijarla el panel se
+    // marcharia en cuanto el usuario tocara cualquier otra ventana.
+    .listen("editar-perfil", (ev) => {
+      perfilFijado = true;
+      mostrarPerfil(ev?.payload?.surface, ev?.payload?.nombre);
+      aviso(
+        `Editando «${ev?.payload?.nombre ?? ""}». El panel está fijado: ` +
+          "suelta el ancla para que vuelva a seguir a la aplicación.",
+        "info"
+      );
+    })
     .catch((e) => console.warn("[MiDeck] no se pudo escuchar perfil-activo:", e));
 
   conectarSoltarArchivos(contextoActual, aviso, refrescar).catch((e) =>

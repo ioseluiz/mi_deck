@@ -32,6 +32,10 @@ image = "0.25"
 # Nombra imagenes e iconos por hash de contenido, para no duplicar archivos.
 sha2 = "0.10"
 
+# Las imagenes de una tecla viajan dentro del archivo de perfil, y JSON solo
+# admite texto.
+base64 = "0.22"
+
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-single-instance = "2"
 

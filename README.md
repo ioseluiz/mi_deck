@@ -727,6 +727,72 @@ hilo principal, así que el mismo evento emitido desde un comando sí llegaba. L
 solución es `run_on_main_thread` **solo para emitir**; buscar el ejecutable y
 emparejar el perfil se quedan en el hilo trabajador.
 
+### Gestionar un perfil
+
+Cada fila de *Ajustes → Perfiles por aplicación* se puede trabajar entera:
+
+| | |
+|---|---|
+| **Nombre** | Se edita en el sitio. Sale del título de la ventana al crearlo, que no siempre da algo presentable; antes había que borrar el perfil y rehacerlo, perdiendo las teclas por una cuestión de texto |
+| **Ejecutables** | Fichas con `×`. El mismo programa llega con nombres distintos según cómo esté instalado, y hay familias donde las mismas teclas valen para varios. El último no se puede quitar: un perfil sin ejecutables no se activaría jamás |
+| **Editar teclas** | Enseña el perfil en el panel **aunque su aplicación no esté abierta**, y lo fija. Antes, a un perfil solo se llegaba teniendo su programa delante: si lo cerrabas, sus teclas quedaban fuera de alcance |
+| **Copiar teclas de…** | Trae las de otro perfil a las celdas libres |
+| **Exportar / Importar** | Un archivo con el perfil entero, para pasárselo a alguien |
+
+#### Copiar no puede destruir
+
+Las teclas copiadas van **solo a celdas libres**: las que ya hubiera se quedan
+donde están. Por eso no hay confirmación —no hace falta una que nadie lee— y por
+eso se dice cuántas no cupieron en vez de perderlas en silencio.
+
+Las carpetas se copian enteras, no se comparten. Si el panel de una carpeta fuera
+el mismo, editarla en un perfil cambiaría la del otro, que es lo contrario de lo
+que espera quien acaba de pedir una copia. Dos teclas que apunten a la misma
+carpeta siguen compartiéndola dentro de la copia, y unas carpetas que se apunten
+entre sí no cuelgan el programa: se recuerda lo ya copiado.
+
+#### El archivo de perfil
+
+Lleva **un perfil**, no el deck: al importarlo se añade a lo que ya tengas sin
+tocar nada más. Un formato de deck completo serviría de respaldo, pero no para
+compartir, que es lo que hacía falta.
+
+```json
+{
+  "version": 1,
+  "nombre": "Excel",
+  "exes": ["excel.exe"],
+  "panel":    { "name": "Excel", "pages": [ … ] },
+  "carpetas": { "s-7": { "name": "Pegado especial", "pages": [ … ] } },
+  "imagenes": { "a1b2c3.png": "iVBORw0KGgo…" }
+}
+```
+
+Las imágenes propias **viajan dentro**, en base64. Hace el archivo más pesado, y
+es el precio de que el perfil se vea igual en el equipo que lo recibe sin pedir
+nada más. Al importarlas, la biblioteca las nombra por contenido, así que dos
+personas con la misma imagen acaban compartiendo archivo y las teclas se
+reescriben al nombre nuevo.
+
+Lo que se rechaza al importar: un archivo de un formato más nuevo, y un perfil
+para una aplicación que **ya tiene uno**. Gana el primero que empareja, así que
+el importado no se activaría nunca; dejarlo entrar sería dar por hecho un trabajo
+que no funciona.
+
+#### El ancla dice lo que se ve
+
+Con el ancla puesta, lo detectado y lo mostrado dejan de coincidir. Antes el
+ancla hablaba de lo detectado, así que decía «perfil *Word* fijado» con las teclas
+de Excel delante. Ahora habla del que está en pantalla, que es lo que permite
+además enseñar un perfil cuya aplicación no está abierta.
+
+#### Lo que sigue faltando
+
+La detección es **por ejecutable**, y eso es de Windows, no de MiDeck: `javaw.exe`,
+`python.exe` o un navegador con varios perfiles son el mismo programa para el
+sistema y no se pueden distinguir entre sí. Afinar por título de ventana sería
+aditivo si algún día estorba.
+
 ## Seguridad
 
 `deck.json` es texto plano y las acciones de tipo `script` ejecutan lo que contengan

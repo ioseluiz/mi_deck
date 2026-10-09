@@ -404,6 +404,220 @@ pub fn delete_profile(deck: &mut Deck, id: &str) -> Result<(), String> {
 }
 
 /// Habilita o deshabilita un perfil sin perder nada.
+/// Cambia el nombre de un perfil, que es el de su superficie.
+///
+/// El nombre sale del titulo de la ventana al crearlo, y un titulo no siempre da
+/// algo presentable. Sin esto habia que borrar el perfil y rehacerlo, perdiendo
+/// las teclas por una cuestion de texto.
+pub fn rename_profile(deck: &mut Deck, id: &str, nombre: &str) -> Result<(), String> {
+    let nombre = nombre.trim();
+    if nombre.is_empty() {
+        return Err("El perfil necesita un nombre.".to_string());
+    }
+    let perfil = buscar(deck, id)?;
+    let superficie = perfil.surface.clone();
+    deck.surfaces
+        .get_mut(&superficie)
+        .ok_or_else(|| format!("El perfil apunta a un panel que no existe: {superficie}"))?
+        .name = nombre.to_string();
+    Ok(())
+}
+
+/// Anade otro ejecutable al mismo perfil.
+///
+/// El mismo programa llega con nombres distintos segun como este instalado, y hay
+/// familias --un visor y su editor, una suite-- donde las mismas teclas valen para
+/// varios. La lista ya existia en el modelo; lo que faltaba era poder tocarla.
+pub fn add_profile_exe(deck: &mut Deck, id: &str, exe: &str) -> Result<(), String> {
+    let exe = crate::focus::nombre_de_ejecutable(exe);
+    if exe.is_empty() {
+        return Err("Hay que indicar la aplicacion.".to_string());
+    }
+
+    // Gana el primer perfil que empareje, asi que repetir un ejecutable en otro
+    // perfil crea una regla que no se cumpliria nunca.
+    if let Some(ya) = crate::perfiles::perfil_para(&deck.profiles, &exe) {
+        if ya.id != id {
+            let como = deck
+                .surfaces
+                .get(&ya.surface)
+                .map(|s| s.name.as_str())
+                .unwrap_or("otro");
+            return Err(format!("Ya hay un perfil para {exe}: «{como}»."));
+        }
+        return Err(format!("Este perfil ya cubre {exe}."));
+    }
+
+    buscar(deck, id)?;
+    let perfil = deck.profiles.iter_mut().find(|p| p.id == id).unwrap();
+    if perfil.exes.iter().any(|e| e.eq_ignore_ascii_case(&exe)) {
+        return Err(format!("Este perfil ya cubre {exe}."));
+    }
+    perfil.exes.push(exe);
+    Ok(())
+}
+
+/// Quita un ejecutable de un perfil.
+///
+/// Nunca el ultimo: un perfil sin ejecutables no se activaria jamas y se quedaria
+/// como una fila muerta en Ajustes. Para eso esta quitar el perfil entero, que
+/// ademas avisa de cuantas teclas se llevaria.
+pub fn remove_profile_exe(deck: &mut Deck, id: &str, exe: &str) -> Result<(), String> {
+    let perfil = deck
+        .profiles
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("No existe el perfil {id}"))?;
+
+    if perfil.exes.len() <= 1 {
+        return Err(
+            "Es el unico ejecutable del perfil: sin el no se activaria nunca.              Quita el perfil entero si ya no lo quieres."
+                .to_string(),
+        );
+    }
+    let antes = perfil.exes.len();
+    perfil.exes.retain(|e| !e.eq_ignore_ascii_case(exe));
+    if perfil.exes.len() == antes {
+        return Err(format!("El perfil no cubre {exe}."));
+    }
+    Ok(())
+}
+
+/// Copia las teclas de un panel a otro sin tocar las que ya hubiera.
+///
+/// Montar un segundo perfil parecido costaba teclearlo todo otra vez. Copiar solo
+/// a celdas libres es deliberado: nunca puede destruir trabajo, asi que no hace
+/// falta una confirmacion que nadie lee. Devuelve cuantas teclas se quedaron
+/// fuera por falta de sitio, para poder decirlo en vez de perderlas en silencio.
+///
+/// Las carpetas se copian enteras. Si se compartiera el panel de destino, editar
+/// una carpeta en un perfil cambiaria la del otro, que es lo contrario de lo que
+/// espera quien acaba de pedir una copia.
+pub fn copy_keys(deck: &mut Deck, desde: &str, hasta: &str) -> Result<usize, String> {
+    if desde == hasta {
+        return Err("El origen y el destino son el mismo panel.".to_string());
+    }
+    if !deck.surfaces.contains_key(desde) {
+        return Err(format!("No existe el panel {desde}"));
+    }
+    if !deck.surfaces.contains_key(hasta) {
+        return Err(format!("No existe el panel {hasta}"));
+    }
+
+    // Un mapa de panel viejo a panel nuevo: ademas de no copiar dos veces la misma
+    // carpeta, corta en seco un ciclo de carpetas que se apunten entre si.
+    let mut copiados: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    copiados.insert(desde.to_string(), hasta.to_string());
+
+    let paginas = deck.surfaces[desde].pages.len();
+    let mut sin_sitio = 0;
+
+    for i in 0..paginas {
+        let originales: Vec<DeckButton> = deck.surfaces[desde].pages[i].buttons.clone();
+        for boton in originales {
+            // La celda de volver de la carpeta de origen no se copia: el destino
+            // la pinta sola si le corresponde.
+            if boton.position == 0 && celda_cero_reservada(deck, desde) {
+                continue;
+            }
+            while deck.surfaces[hasta].pages.len() <= i {
+                deck.surfaces
+                    .get_mut(hasta)
+                    .unwrap()
+                    .pages
+                    .push(Page::default());
+            }
+            let Some(destino) = hueco_para(deck, hasta, i, boton.position) else {
+                sin_sitio += 1;
+                continue;
+            };
+
+            let mut copia = boton.clone();
+            copia.id = nuevo_id(deck, "b");
+            copia.position = destino;
+            if let Action::Folder { surface } = &copia.action {
+                let suyo = clonar_panel(deck, surface, &mut copiados);
+                copia.action = Action::Folder { surface: suyo };
+            }
+            deck.surfaces.get_mut(hasta).unwrap().pages[i]
+                .buttons
+                .push(copia);
+        }
+    }
+    Ok(sin_sitio)
+}
+
+/// Celda libre del destino: la misma de origen si esta libre, si no la primera.
+fn hueco_para(deck: &Deck, surface_id: &str, pagina: usize, preferida: u32) -> Option<u32> {
+    let reservada = celda_cero_reservada(deck, surface_id);
+    let ocupadas: Vec<u32> = deck
+        .surfaces
+        .get(surface_id)
+        .and_then(|s| s.pages.get(pagina))
+        .map(|p| p.buttons.iter().map(|b| b.position).collect())
+        .unwrap_or_default();
+
+    if preferida < celdas(deck) && !(reservada && preferida == 0) && !ocupadas.contains(&preferida)
+    {
+        return Some(preferida);
+    }
+    primera_libre(deck, surface_id, pagina)
+}
+
+/// Copia un panel entero y devuelve el identificador del nuevo.
+///
+/// `ya` recuerda lo copiado en esta misma operacion: sin eso, dos teclas que
+/// apunten a la misma carpeta darian dos copias, y un ciclo no terminaria nunca.
+fn clonar_panel(
+    deck: &mut Deck,
+    origen: &str,
+    ya: &mut std::collections::HashMap<String, String>,
+) -> String {
+    if let Some(hecho) = ya.get(origen) {
+        return hecho.clone();
+    }
+    let Some(viejo) = deck.surfaces.get(origen).cloned() else {
+        // Una referencia rota se copia tal cual: no es cosa de esta funcion
+        // arreglarla, y `integrity` ya la reporta.
+        return origen.to_string();
+    };
+
+    let nuevo = nuevo_id(deck, "s");
+    ya.insert(origen.to_string(), nuevo.clone());
+    deck.surfaces
+        .insert(nuevo.clone(), Surface::new(&viejo.name));
+
+    for (i, pagina) in viejo.pages.iter().enumerate() {
+        while deck.surfaces[&nuevo].pages.len() <= i {
+            deck.surfaces
+                .get_mut(&nuevo)
+                .unwrap()
+                .pages
+                .push(Page::default());
+        }
+        for boton in &pagina.buttons {
+            let mut copia = boton.clone();
+            copia.id = nuevo_id(deck, "b");
+            if let Action::Folder { surface } = &copia.action {
+                let suyo = clonar_panel(deck, surface, ya);
+                copia.action = Action::Folder { surface: suyo };
+            }
+            deck.surfaces.get_mut(&nuevo).unwrap().pages[i]
+                .buttons
+                .push(copia);
+        }
+    }
+    nuevo
+}
+
+/// Perfil por identificador, o un error que lo nombre.
+fn buscar<'a>(deck: &'a Deck, id: &str) -> Result<&'a crate::perfiles::Profile, String> {
+    deck.profiles
+        .iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("No existe el perfil {id}"))
+}
+
 pub fn set_profile_enabled(deck: &mut Deck, id: &str, enabled: bool) -> Result<(), String> {
     let p = deck
         .profiles
@@ -428,6 +642,179 @@ mod tests {
     use super::*;
     use crate::model::IconSource;
     use crate::store::default_deck;
+
+    /// Un deck con un perfil recien creado y su identificador.
+    fn con_perfil() -> (Deck, String) {
+        let mut deck = default_deck();
+        create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        let id = deck.profiles[0].id.clone();
+        (deck, id)
+    }
+
+    #[test]
+    fn copiar_teclas_llena_un_panel_vacio_sin_mover_nada() {
+        let mut deck = default_deck();
+        let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
+        deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            buttons: vec![boton("b1", 3), boton("b2", 7)],
+        }];
+
+        let fuera = copy_keys(&mut deck, &a, &b).unwrap();
+
+        assert_eq!(fuera, 0);
+        let copiadas = &deck.surfaces[&b].pages[0].buttons;
+        assert_eq!(copiadas.len(), 2);
+        // Mismas celdas, porque estaban libres.
+        assert_eq!(copiadas[0].position, 3);
+        assert_eq!(copiadas[1].position, 7);
+        // Identificadores nuevos: dos teclas no pueden compartir el mismo.
+        assert_ne!(copiadas[0].id, "b1");
+    }
+
+    #[test]
+    fn copiar_teclas_no_pisa_las_que_ya_hubiera() {
+        // Nunca destruye trabajo: por eso no hace falta confirmacion.
+        let mut deck = default_deck();
+        let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
+        deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            buttons: vec![boton("b1", 3)],
+        }];
+        deck.surfaces.get_mut(&b).unwrap().pages = vec![Page {
+            buttons: vec![boton("suya", 3)],
+        }];
+
+        copy_keys(&mut deck, &a, &b).unwrap();
+
+        let destino = &deck.surfaces[&b].pages[0].buttons;
+        assert_eq!(destino.len(), 2);
+        assert_eq!(destino[0].id, "suya", "la que ya estaba sigue en su celda");
+        assert_ne!(destino[1].position, 3, "la copia se fue a otra celda");
+    }
+
+    #[test]
+    fn las_teclas_que_no_caben_se_cuentan_en_vez_de_perderse() {
+        let mut deck = default_deck();
+        deck.settings.grid = crate::model::Grid { cols: 2, rows: 1 };
+        let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
+        deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            buttons: vec![boton("b1", 0), boton("b2", 1)],
+        }];
+        deck.surfaces.get_mut(&b).unwrap().pages = vec![Page {
+            buttons: vec![boton("suya", 0)],
+        }];
+
+        let fuera = copy_keys(&mut deck, &a, &b).unwrap();
+        assert_eq!(fuera, 1, "una no cabia y hay que poder decirlo");
+    }
+
+    #[test]
+    fn una_carpeta_copiada_es_suya_y_no_la_del_otro_perfil() {
+        // Si se compartiera, editar la carpeta en un perfil cambiaria la del
+        // otro, que es lo contrario de lo que espera quien pide una copia.
+        let mut deck = default_deck();
+        let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
+        deck.surfaces
+            .insert("s-sub".into(), Surface::new("Pegado especial"));
+        deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            buttons: vec![boton("dentro", 1)],
+        }];
+        let mut carpeta = boton("bc", 2);
+        carpeta.action = Action::Folder {
+            surface: "s-sub".into(),
+        };
+        deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            buttons: vec![carpeta],
+        }];
+
+        copy_keys(&mut deck, &a, &b).unwrap();
+
+        let Action::Folder { surface } = &deck.surfaces[&b].pages[0].buttons[0].action else {
+            panic!("deberia seguir siendo una carpeta");
+        };
+        assert_ne!(surface, "s-sub", "la carpeta quedo compartida");
+        assert_eq!(deck.surfaces[surface].pages[0].buttons.len(), 1);
+    }
+
+    #[test]
+    fn un_panel_no_se_copia_sobre_si_mismo() {
+        let mut deck = default_deck();
+        let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
+        assert!(copy_keys(&mut deck, &a, &a).is_err());
+    }
+
+    #[test]
+    fn renombrar_un_perfil_cambia_el_nombre_de_su_panel() {
+        let (mut deck, id) = con_perfil();
+        rename_profile(&mut deck, &id, "  Hojas de calculo  ").unwrap();
+
+        let sid = &deck.profiles[0].surface;
+        assert_eq!(deck.surfaces[sid].name, "Hojas de calculo");
+    }
+
+    #[test]
+    fn un_perfil_no_se_queda_sin_nombre() {
+        let (mut deck, id) = con_perfil();
+        assert!(rename_profile(&mut deck, &id, "   ").is_err());
+        assert_eq!(deck.surfaces[&deck.profiles[0].surface].name, "Excel");
+    }
+
+    #[test]
+    fn un_perfil_puede_cubrir_varios_ejecutables() {
+        let (mut deck, id) = con_perfil();
+        add_profile_exe(&mut deck, &id, "C:/Office/WINWORD.EXE").unwrap();
+
+        // Se guarda el nombre suelto, que es con lo que se compara despues.
+        assert_eq!(deck.profiles[0].exes, vec!["excel.exe", "winword.exe"]);
+    }
+
+    #[test]
+    fn no_se_puede_robar_el_ejecutable_de_otro_perfil() {
+        // Gana el primero que empareje, asi que la segunda regla no se cumpliria
+        // nunca: es mejor decirlo que dejarla ahi sin funcionar.
+        let (mut deck, _) = con_perfil();
+        create_profile(&mut deck, "winword.exe", "Word").unwrap();
+        let word = deck.profiles[1].id.clone();
+
+        let Err(motivo) = add_profile_exe(&mut deck, &word, "EXCEL.EXE") else {
+            panic!("deberia haberse quejado");
+        };
+        assert!(
+            motivo.contains("Excel"),
+            "deberia nombrar el perfil: {motivo}"
+        );
+    }
+
+    #[test]
+    fn repetir_el_mismo_ejecutable_no_lo_duplica() {
+        let (mut deck, id) = con_perfil();
+        assert!(add_profile_exe(&mut deck, &id, "Excel.exe").is_err());
+        assert_eq!(deck.profiles[0].exes.len(), 1);
+    }
+
+    #[test]
+    fn quitar_el_ultimo_ejecutable_dejaria_el_perfil_muerto() {
+        // Sin ejecutables no se activaria jamas y se quedaria como una fila que
+        // no hace nada. Para eso esta quitar el perfil entero.
+        let (mut deck, id) = con_perfil();
+        let Err(motivo) = remove_profile_exe(&mut deck, &id, "excel.exe") else {
+            panic!("deberia haberse quejado");
+        };
+        assert!(motivo.contains("unico"), "{motivo}");
+        assert_eq!(deck.profiles[0].exes.len(), 1);
+    }
+
+    #[test]
+    fn quitar_un_ejecutable_cuando_hay_otro_si_vale() {
+        let (mut deck, id) = con_perfil();
+        add_profile_exe(&mut deck, &id, "winword.exe").unwrap();
+        remove_profile_exe(&mut deck, &id, "EXCEL.EXE").unwrap();
+
+        assert_eq!(deck.profiles[0].exes, vec!["winword.exe"]);
+    }
 
     fn boton(id: &str, pos: u32) -> DeckButton {
         DeckButton {

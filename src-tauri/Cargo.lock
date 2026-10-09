@@ -2480,6 +2480,7 @@ dependencies = [
 name = "mideck"
 version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "image",
  "serde",
  "serde_json",
