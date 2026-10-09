@@ -29,6 +29,7 @@ pub enum SystemCommand {
     VolumeUp,
     VolumeDown,
     VolumeMute,
+    MicMute,
     // --- sistema
     Lock,
     ShowDesktop,
@@ -249,6 +250,18 @@ const CATALOGO: &[ComandoInfo] = &[
         "silencio",
         Teclas("VolumeMute"),
     ),
+    ComandoInfo {
+        aviso: Some(
+            "Corta y abre el microfono predeterminado. No hay tecla de teclado para              esto: va por la API de audio de Windows, asi que lo ve cualquier              programa que lo este usando.",
+        ),
+        ..c(
+            S::MicMute,
+            "Silenciar el microfono",
+            Multimedia,
+            "silencio",
+            Api,
+        )
+    },
     // ------------------------------------------------------------- sistema
     // Por API y no con Win+L: el atajo se puede deshabilitar por politica, y en
     // un equipo gestionado eso es un riesgo real.
@@ -410,6 +423,13 @@ pub fn ejecutar_api(cmd: SystemCommand) -> Result<(), String> {
             LockWorkStation().map_err(|e| format!("No se pudo bloquear el equipo: {e}"))
         },
 
+        // Leer y escribir en la misma llamada: entre las dos, el usuario podria
+        // haberlo cambiado desde Teams, y la tecla acabaria haciendo lo
+        // contrario de lo que ensena.
+        SystemCommand::MicMute => {
+            crate::audio::alternar_silencio(crate::audio::Flujo::Microfono).map(|_| ())
+        }
+
         SystemCommand::Sleep => suspender(),
 
         SystemCommand::SignOut => unsafe {
@@ -551,6 +571,7 @@ mod tests {
             S::VolumeUp,
             S::VolumeDown,
             S::VolumeMute,
+            S::MicMute,
             S::Lock,
             S::ShowDesktop,
             S::TaskView,
@@ -579,6 +600,7 @@ mod tests {
                 | S::VolumeUp
                 | S::VolumeDown
                 | S::VolumeMute
+                | S::MicMute
                 | S::Lock
                 | S::ShowDesktop
                 | S::TaskView

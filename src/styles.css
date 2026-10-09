@@ -596,7 +596,7 @@ body {
 /* Marca de rueda: dos flechitas en la esquina de arriba a la izquierda.
    Con forma y no solo con color, igual que la esquina doblada de una carpeta. */
 .key--rueda::before {
-  content: "95";
+  content: "↕"; /* flecha arriba-abajo, directa y no escapada */
   position: absolute;
   top: 3px;
   left: 5px;

@@ -559,7 +559,8 @@ mod tests_tolerancia {
             "icon": { "type": "auto" },
             "action": { "type": "hotkey", "keys": "Ctrl+S" },
             "states": [{ "label": "Activar" }],
-            "live": { "type": "micro_silenciado" }
+            "live": { "type": "micro_silenciado" },
+            "invento_de_otra_version": { "x": 1 }
         }"#;
 
         let tecla: DeckButton = serde_json::from_str(crudo).expect("deberia leerse");
@@ -568,14 +569,14 @@ mod tests_tolerancia {
 
         let vuelta = serde_json::to_value(&tecla).unwrap();
         assert!(vuelta.get("states").is_some(), "se perdio `states`");
+        // Y un campo entero que esta version no conoce sigue ahi gracias a `extra`.
+        assert_eq!(vuelta["invento_de_otra_version"]["x"], 1);
         assert!(vuelta.get("live").is_some(), "se perdio `live`");
-        // Una fuente que esta version no conoce vuelve envuelta, con el original
-        // dentro, igual que una accion desconocida. Antes de que `live` fuera un
-        // campo con tipo esto pasaba sin mas; al darle tipo, una variante
-        // desconocida se llevaba la tecla entera y con ella el deck. Lo encontro
-        // este mismo test.
-        assert_eq!(vuelta["live"]["type"], "desconocida");
-        assert_eq!(vuelta["live"]["__original"]["type"], "micro_silenciado");
+        // `micro_silenciado` se escribio aqui cuando esta version no lo conocia,
+        // y entonces volvia envuelto. Ahora que existe, se recupera solo: es la
+        // ida y vuelta completa de la red de compatibilidad, y la razon de
+        // envolver en vez de descartar.
+        assert_eq!(vuelta["live"]["type"], "micro_silenciado");
     }
 
     /// Tecla con dos caras, para las pruebas de `cara`.

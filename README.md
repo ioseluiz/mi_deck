@@ -483,6 +483,45 @@ las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
 publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
 `urls` o `system` sigue siendo destructivo.
 
+## Volumen y micrófono
+
+Hasta aquí MiDeck solo **simulaba teclas multimedia**: subir el volumen era mandar
+`VolumeUp`, que mueve el del sistema en pasos del 2 % y no deja preguntar en qué
+porcentaje está. Para que una tecla *enseñe* el volumen hay que leerlo, y leerlo
+solo se puede por Core Audio.
+
+Y hay algo que sin esto no se podía hacer **en absoluto**: silenciar el micrófono.
+No existe tecla virtual estándar para ello —`VK_VOLUME_MUTE` silencia el altavoz—,
+así que la única vía es el endpoint de captura.
+
+| Fuente | Qué pinta |
+|---|---|
+| El volumen | `44%`, y apaga la tecla si está silenciado |
+| Si el sonido está silenciado | Apaga la tecla al silenciar |
+| Si el micrófono está silenciado | Apaga la tecla al cortarlo |
+
+Y una acción nueva en el catálogo: **Silenciar el micrófono**, que conmuta.
+
+### Dos detalles que no son evidentes
+
+**Silenciado y bajado del todo son cosas distintas** en Windows, y la tecla lo
+distingue: a cero sin silenciar sigue encendida, y silenciado al 60 % sigue diciendo
+`60%` aunque no se oiga nada.
+
+**Conmutar lee y escribe en la misma llamada.** Si el que llama leyera primero y
+escribiera después, entre las dos cosas el usuario podría haberlo cambiado desde
+Teams, y la tecla acabaría haciendo lo contrario de lo que enseña.
+
+### Por qué sondeo y no notificaciones
+
+Un `IAudioEndpointVolumeCallback` avisaría antes, pero llega en un hilo de COM que
+no es el principal, obliga a un apartamento multihilo —distinto del que usa el resto
+del programa— y a vigilar que el objeto siga vivo. El latido ya pregunta una vez por
+segundo, que para una tecla sobra, y así el módulo de audio no guarda estado ninguno.
+
+Medido: subir el volumen **con la tecla multimedia del teclado**, sin tocar MiDeck,
+y la tecla pasó de 36 % a 44 % sola.
+
 ## Teclas de varias caras
 
 Una tecla puede tener más de una cara —silenciar/activar, grabar/parar— y alternar

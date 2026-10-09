@@ -23,6 +23,12 @@ pub enum Fuente {
         exe: String,
     },
     Reloj,
+    /// Volumen del altavoz, de 0 a 100.
+    Volumen,
+    /// Si el altavoz esta silenciado.
+    AltavozSilenciado,
+    /// Si el microfono esta silenciado.
+    MicroSilenciado,
     Bateria,
     MemoriaUsada,
     /// Espacio libre de una unidad: "C:".
@@ -123,6 +129,9 @@ pub struct Lecturas {
     /// Hora local: hora y minuto. Sin segundos: una tecla que parpadea cada
     /// segundo es ruido, y obligaria a latir mas deprisa de lo necesario.
     pub hora: Option<(u16, u16)>,
+    pub volumen: Option<u8>,
+    pub altavoz_silenciado: Option<bool>,
+    pub micro_silenciado: Option<bool>,
     pub bateria: Option<u8>,
     pub memoria_usada: Option<u8>,
     /// Ejecutables con algun proceso vivo, en minusculas.
@@ -141,6 +150,27 @@ pub fn valor_de(fuente: &Fuente, l: &Lecturas) -> Valor {
             let clave = crate::focus::nombre_de_ejecutable(exe);
             Valor::interruptor(l.procesos.iter().any(|p| p.eq_ignore_ascii_case(&clave)))
         }
+
+        Fuente::Volumen => match l.volumen {
+            Some(p) => Valor {
+                texto: Some(format!("{p}%")),
+                // Apagada al silencio, no al cero: silenciar y bajar del todo son
+                // cosas distintas en Windows y la tecla tiene que distinguirlas.
+                encendido: l.altavoz_silenciado.map(|m| !m),
+            },
+            None => Valor::nada(),
+        },
+
+        // Silenciado es la cara "alterada", asi que encendido significa que se
+        // oye: la cara 0 es siempre el estado normal.
+        Fuente::AltavozSilenciado => match l.altavoz_silenciado {
+            Some(m) => Valor::interruptor(!m),
+            None => Valor::nada(),
+        },
+        Fuente::MicroSilenciado => match l.micro_silenciado {
+            Some(m) => Valor::interruptor(!m),
+            None => Valor::nada(),
+        },
 
         Fuente::Reloj => match l.hora {
             Some((h, m)) => Valor::texto(format!("{h:02}:{m:02}")),
@@ -211,6 +241,15 @@ pub fn leer(fuentes: &[Fuente]) -> Lecturas {
     }
     if quiere(&Fuente::Reloj) {
         l.hora = hora_local();
+    }
+    if quiere(&Fuente::Volumen) {
+        l.volumen = crate::audio::volumen(crate::audio::Flujo::Altavoz);
+    }
+    if quiere(&Fuente::Volumen) || quiere(&Fuente::AltavozSilenciado) {
+        l.altavoz_silenciado = crate::audio::silenciado(crate::audio::Flujo::Altavoz);
+    }
+    if quiere(&Fuente::MicroSilenciado) {
+        l.micro_silenciado = crate::audio::silenciado(crate::audio::Flujo::Microfono);
     }
     if quiere(&Fuente::Bateria) {
         l.bateria = bateria();
@@ -438,6 +477,62 @@ mod tests {
             exe: "word.exe".into(),
         };
         assert_eq!(valor_de(&f, &l).encendido, Some(false));
+    }
+
+    #[test]
+    fn el_volumen_distingue_silenciado_de_bajado_del_todo() {
+        // En Windows son dos cosas distintas, y la tecla tiene que decirlo: a
+        // cero pero sin silenciar, la tecla sigue encendida.
+        let a_cero = Lecturas {
+            volumen: Some(0),
+            altavoz_silenciado: Some(false),
+            ..Default::default()
+        };
+        let v = valor_de(&Fuente::Volumen, &a_cero);
+        assert_eq!(v.texto.unwrap(), "0%");
+        assert_eq!(v.encendido, Some(true), "a cero no es silenciado");
+
+        let silenciado_al_60 = Lecturas {
+            volumen: Some(60),
+            altavoz_silenciado: Some(true),
+            ..Default::default()
+        };
+        let v = valor_de(&Fuente::Volumen, &silenciado_al_60);
+        assert_eq!(
+            v.texto.unwrap(),
+            "60%",
+            "el volumen sigue siendo 60 aunque calle"
+        );
+        assert_eq!(v.encendido, Some(false));
+    }
+
+    #[test]
+    fn silenciado_apaga_la_tecla_y_no_al_reves() {
+        // La cara 0 es el estado normal: con el micro abierto la tecla esta
+        // encendida, y al cortarlo se apaga.
+        let abierto = Lecturas {
+            micro_silenciado: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(
+            valor_de(&Fuente::MicroSilenciado, &abierto).encendido,
+            Some(true)
+        );
+
+        let cortado = Lecturas {
+            micro_silenciado: Some(true),
+            ..Default::default()
+        };
+        assert_eq!(
+            valor_de(&Fuente::MicroSilenciado, &cortado).encendido,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn sin_microfono_la_tecla_no_se_inventa_nada() {
+        let v = valor_de(&Fuente::MicroSilenciado, &Lecturas::default());
+        assert_eq!(v, Valor::nada());
     }
 
     #[test]

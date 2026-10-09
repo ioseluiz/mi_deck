@@ -5,6 +5,7 @@
 //! pinta y envia eventos, asi que lo importante queda cubierto por cargo test.
 
 pub mod apps;
+pub mod audio;
 pub mod burbuja;
 pub mod captura;
 pub mod edit;
