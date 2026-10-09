@@ -706,9 +706,16 @@ function conectarEdicion() {
   // amortiguada, y con el perfil ya resuelto.
   ventana()
     .listen("perfil-activo", (ev) => aplicarPerfil(ev?.payload))
-    // Ajustes pide ensenar un perfil para editarlo. Se fija el ancla: su
-    // aplicacion no tiene por que estar abierta, y sin fijarla el panel se
-    // marcharia en cuanto el usuario tocara cualquier otra ventana.
+    .catch((e) => console.warn("[MiDeck] no se pudo escuchar perfil-activo:", e));
+
+  // Ajustes pide ensenar un perfil para editarlo. Se fija el ancla: su aplicacion
+  // no tiene por que estar abierta, y sin fijarla el panel se marcharia en cuanto
+  // el usuario tocara cualquier otra ventana.
+  //
+  // Cada escucha va en su propia llamada: `listen` devuelve una promesa, no la
+  // ventana, asi que encadenar dos seguidas lanza y se lleva por delante todo lo
+  // que venga despues de `conectarEventos`, incluida la primera pintada.
+  ventana()
     .listen("editar-perfil", (ev) => {
       perfilFijado = true;
       mostrarPerfil(ev?.payload?.surface, ev?.payload?.nombre);
@@ -718,7 +725,7 @@ function conectarEdicion() {
         "info"
       );
     })
-    .catch((e) => console.warn("[MiDeck] no se pudo escuchar perfil-activo:", e));
+    .catch((e) => console.warn("[MiDeck] no se pudo escuchar editar-perfil:", e));
 
   conectarSoltarArchivos(contextoActual, aviso, refrescar).catch((e) =>
     console.warn("[MiDeck] arrastre de archivos no disponible:", e)
@@ -823,6 +830,25 @@ async function iniciar() {
 }
 
 iniciar().catch((err) => {
-  aviso(`No se pudo arrancar: ${err}`);
   console.error(err);
+  // El aviso normal se desvanece a los pocos segundos, y si el arranque se rompe
+  // la rejilla se queda vacia: lo que se ve es un panel negro sin explicacion, y
+  // el motivo ya se ha ido. Aqui el error se queda escrito donde deberian estar
+  // las teclas, que es donde se mira.
+  $grid.innerHTML =
+    '<div class="arranque-roto">' +
+    "<b>MiDeck no pudo arrancar.</b><br><br>" +
+    escaparTexto(String(err)) +
+    "<br><br>Vuelve a abrirlo. Si sigue igual, manda este texto." +
+    "</div>";
+  aviso(`No se pudo arrancar: ${err}`);
 });
+
+/** Escapa para meter texto en innerHTML sin que el error se interprete. */
+function escaparTexto(t) {
+  return String(t).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}

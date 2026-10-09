@@ -36,6 +36,10 @@ EXIGENCIAS = [
     # que distinguirse de una tecla normal sin depender solo del tono, porque
     # quien no distingue el rojo necesita verlo igual.
     ("borde de tecla armada sobre el panel", "--armada-borde", "--fondo", 3.0),
+    # El aviso de arranque roto: se lee sobre su propio fondo y su borde se ve
+    # sobre el panel. Es lo unico que queda en pantalla cuando nada funciona.
+    ("texto de arranque roto sobre su fondo", "#ffd9dc", "#2a1d1f", 4.5),
+    ("borde de arranque roto sobre el panel", "#9a4a53", "--fondo", 3.0),
     # La burbuja flotante vive sobre lo que sea: su fondo no se puede comprobar
     # contra nada fijo. Lo que si tiene que cumplir es que su icono se distinga
     # de su propia superficie, que es un grafico de interfaz (WCAG 1.4.11).

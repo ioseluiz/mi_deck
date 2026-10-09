@@ -577,3 +577,18 @@ body {
   transform: scale(0.9);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
 }
+
+/* Arranque roto: el error se queda donde deberian estar las teclas, porque un
+   panel vacio y negro no dice nada y el aviso normal se desvanece. */
+.arranque-roto {
+  grid-column: 1 / -1;
+  padding: 14px 16px;
+  background: #2a1d1f;
+  border: 1px solid #9a4a53;
+  border-radius: var(--radio-tecla);
+  color: #ffd9dc;
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
