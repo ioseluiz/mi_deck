@@ -11,11 +11,31 @@ use std::path::Path;
 
 use crate::model::{Action, Shell};
 
-/// Bandera de CreateProcess: no crear ventana de consola para el hijo.
+/// Banderas de CreateProcess.
+///
+/// `CREATE_NO_WINDOW` le da al hijo una consola que no se ve, y
+/// `CREATE_NEW_CONSOLE` una propia y visible. Las dos son excluyentes entre si y
+/// con `DETACHED_PROCESS`, que dejaria al hijo **sin ninguna consola**: eso es lo
+/// que hacia que una tecla de PowerShell no hiciera nada: el proceso arrancaba,
+/// su host no encontraba consola donde iniciarse y moria antes de ejecutar una
+/// sola linea. `cmd.exe` lo aguantaba, y por eso tardo en verse.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[cfg(windows)]
-const DETACHED_PROCESS: u32 = 0x0000_0008;
+const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+/// Banderas de creacion para un hijo, segun si debe verse su consola.
+///
+/// Es una sola de las tres, nunca una suma: se devuelve en vez de combinarse
+/// para que el compilador no deje escribir `a | b` por descuido.
+#[cfg(windows)]
+pub fn banderas_de_consola(no_window: bool) -> u32 {
+    if no_window {
+        CREATE_NO_WINDOW
+    } else {
+        CREATE_NEW_CONSOLE
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchSpec {
@@ -807,11 +827,7 @@ pub fn execute(spec: &LaunchSpec) -> Result<(), String> {
             #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;
-                let mut flags = DETACHED_PROCESS;
-                if *no_window {
-                    flags |= CREATE_NO_WINDOW;
-                }
-                cmd.creation_flags(flags);
+                cmd.creation_flags(banderas_de_consola(*no_window));
             }
             cmd.spawn()
                 .map(|_| ())
@@ -893,6 +909,30 @@ fn open_with_shell(target: &str) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::model::{Action, Shell};
+
+    #[cfg(windows)]
+    #[test]
+    fn una_consola_oculta_y_una_visible_son_banderas_distintas_y_sueltas() {
+        // DETACHED_PROCESS (0x8) estuvo aqui sumado a CREATE_NO_WINDOW y dejaba
+        // al hijo sin ninguna consola: PowerShell arrancaba, su host no
+        // encontraba donde iniciarse y moria antes de ejecutar una linea, con
+        // spawn() devolviendo Ok. Una tecla de script no hacia nada y no habia
+        // error que mirar. Este test existe para que no vuelva a sumarse.
+        let oculta = banderas_de_consola(true);
+        let visible = banderas_de_consola(false);
+
+        assert_eq!(
+            oculta, 0x0800_0000,
+            "oculta deberia ser solo CREATE_NO_WINDOW"
+        );
+        assert_eq!(
+            visible, 0x0000_0010,
+            "visible deberia ser solo CREATE_NEW_CONSOLE"
+        );
+        assert_eq!(oculta & 0x0000_0008, 0, "no puede llevar DETACHED_PROCESS");
+        assert_eq!(visible & 0x0000_0008, 0, "no puede llevar DETACHED_PROCESS");
+        assert_eq!(oculta & visible, 0, "son excluyentes, no se combinan");
+    }
 
     fn app(target: &str, args: &str) -> Action {
         Action::App {
