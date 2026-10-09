@@ -508,7 +508,12 @@ async function vigilarPosicion() {
 
 /** Contexto actual para las operaciones de edicion. */
 function contextoActual() {
-  return { surfaceId: nav?.surfaceId ?? "", page: nav?.page ?? 0 };
+  return {
+    surfaceId: nav?.surfaceId ?? "",
+    page: nav?.page ?? 0,
+    // Lo necesita el arrastre para no mandar una tecla a una pagina que no existe.
+    pageCount: nav?.pageCount ?? 1,
+  };
 }
 
 /** Recarga el deck desde Rust y repinta, conservando donde estaba el usuario. */

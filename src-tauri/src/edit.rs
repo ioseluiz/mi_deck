@@ -294,6 +294,7 @@ pub fn create_folder(
         action: Action::Folder {
             surface: sid_nueva.clone(),
         },
+        extra: Default::default(),
     };
     let bid = boton.id.clone();
 
@@ -828,6 +829,7 @@ mod tests {
                 workdir: String::new(),
                 focus_if_running: false,
             },
+            extra: Default::default(),
         }
     }
 

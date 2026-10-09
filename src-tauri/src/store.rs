@@ -189,6 +189,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Path {
                             target: "%USERPROFILE%".into(),
                         },
+                        extra: Default::default(),
                     },
                     DeckButton {
                         id: "b-notepad".into(),
@@ -201,6 +202,7 @@ pub fn default_deck() -> Deck {
                             workdir: String::new(),
                             focus_if_running: false,
                         },
+                        extra: Default::default(),
                     },
                     DeckButton {
                         id: "b-ejemplos".into(),
@@ -215,6 +217,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Folder {
                             surface: "s-ejemplos".into(),
                         },
+                        extra: Default::default(),
                     },
                 ],
             }],
@@ -237,6 +240,7 @@ pub fn default_deck() -> Deck {
                             browser: "default".into(),
                             profile: None,
                         },
+                        extra: Default::default(),
                     },
                     DeckButton {
                         id: "b-descargas".into(),
@@ -251,6 +255,7 @@ pub fn default_deck() -> Deck {
                         action: Action::Path {
                             target: "%USERPROFILE%\\Downloads".into(),
                         },
+                        extra: Default::default(),
                     },
                     DeckButton {
                         id: "b-version".into(),
@@ -268,6 +273,7 @@ pub fn default_deck() -> Deck {
                             args: String::new(),
                             hidden: false,
                         },
+                        extra: Default::default(),
                     },
                 ],
             }],

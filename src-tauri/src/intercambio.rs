@@ -268,6 +268,7 @@ mod tests {
                 ..Icon::default()
             },
             action: accion,
+            extra: Default::default(),
         }
     }
 

@@ -555,18 +555,20 @@ function leerFormulario() {
   tecla.icon.label_style = $("ed-labelstyle").value;
 }
 
-/** Lo que espera Rust: sin los campos auxiliares que solo usa la vista previa. */
+/**
+ * Lo que espera Rust: sin los campos auxiliares que solo usa la vista previa.
+ *
+ * Se parte de la tecla entera y se quita lo de pintar, en vez de enumerar los
+ * campos que se conservan. Enumerarlos hacia que cualquier campo que esta
+ * version no conociera desapareciera al guardar, aunque hubiera llegado intacto
+ * desde Rust: la misma perdida silenciosa que `extra` arregla en el modelo, pero
+ * por el otro lado.
+ */
 function aModelo() {
   const icon = { ...tecla.icon };
   delete icon.src; // solo para pintar aqui
   if (!icon.background) delete icon.background;
-  return {
-    id: tecla.id,
-    position: tecla.position,
-    label: tecla.label,
-    icon,
-    action: tecla.action,
-  };
+  return { ...tecla, icon };
 }
 
 // ------------------------------------------------------------------ imagenes

@@ -138,7 +138,7 @@ export async function conectarSoltarArchivos(contexto, aviso, refrescar) {
  * Arrastre interno con eventos de puntero.
  *
  * @param {HTMLElement} grid
- * @param {() => {surfaceId: string, page: number}} contexto
+ * @param {() => {surfaceId: string, page: number, pageCount: number}} contexto
  * @param {(msg: string, tipo?: string) => void} aviso
  * @param {() => Promise<void>} refrescar
  * @param {() => boolean} puedeArrastrar
@@ -147,6 +147,30 @@ export function conectarReordenar(grid, contexto, aviso, refrescar, puedeArrastr
   let origen = null;
   let arrastrando = false;
   let fantasma = null;
+
+  /** Deshace el arrastre sin mover nada. */
+  function cancelar() {
+    if (!origen) return;
+    origen.el.classList.remove("key--arrastrando");
+    try {
+      origen.el.releasePointerCapture?.(origen.puntero);
+    } catch {
+      // Si el puntero ya se solto, soltarlo otra vez no es un problema.
+    }
+    origen = null;
+    arrastrando = false;
+    fantasma?.remove();
+    fantasma = null;
+    limpiarResaltado();
+  }
+
+  /** El boton de pagina bajo unas coordenadas, si lo hay. */
+  function pagerEn(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const boton = /** @type {HTMLElement} */ (el)?.closest?.("#btn-prev, #btn-next");
+    if (!boton) return null;
+    return { el: boton, delta: boton.id === "btn-next" ? 1 : -1 };
+  }
 
   grid.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0 || !puedeArrastrar()) return;
@@ -157,7 +181,15 @@ export function conectarReordenar(grid, contexto, aviso, refrescar, puedeArrastr
       x: ev.clientX,
       y: ev.clientY,
       el: tecla,
+      puntero: ev.pointerId,
     };
+    // Con captura, los movimientos siguen llegando aunque el cursor salga de la
+    // ventana. Sin ella, soltar fuera dejaba el fantasma colgado para siempre.
+    try {
+      tecla.setPointerCapture?.(ev.pointerId);
+    } catch {
+      // Algun puntero no admite captura; el arrastre sigue valiendo sin ella.
+    }
   });
 
   window.addEventListener("pointermove", (ev) => {
@@ -178,9 +210,31 @@ export function conectarReordenar(grid, contexto, aviso, refrescar, puedeArrastr
     fantasma.style.top = `${ev.clientY}px`;
 
     limpiarResaltado();
+    const pagina = pagerEn(ev.clientX, ev.clientY);
+    if (pagina) {
+      pagina.el.classList.add("drop-aqui");
+      return;
+    }
     const destino = celdaEn(ev.clientX, ev.clientY);
     if (destino && destino.botonId !== origen.botonId) {
       destino.el.classList.add(destino.esCarpeta ? "drop-dentro" : "drop-aqui");
+    }
+  });
+
+  // Windows cancela el puntero por su cuenta en mas casos de los que parece: un
+  // gesto tactil que pasa a desplazamiento, otra ventana que roba la captura.
+  // Sin esto, el fantasma se quedaba pegado al cursor hasta repintar.
+  window.addEventListener("pointercancel", cancelar);
+
+  // Escape es lo que cualquiera prueba al ver que ha cogido la tecla que no era.
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || !origen) return;
+    const movio = arrastrando;
+    cancelar();
+    if (movio) {
+      // Se marca igualmente para que el `click` de soltar no ejecute la tecla.
+      finDeArrastre = performance.now();
+      aviso("Arrastre cancelado.", "info");
     }
   });
 
@@ -188,19 +242,39 @@ export function conectarReordenar(grid, contexto, aviso, refrescar, puedeArrastr
     if (!origen) return;
     const fuente = origen;
     const movio = arrastrando;
-    origen = null;
-    arrastrando = false;
-    fuente.el.classList.remove("key--arrastrando");
-    fantasma?.remove();
-    fantasma = null;
-    limpiarResaltado();
+    cancelar();
     if (!movio) return;
     finDeArrastre = performance.now();
+
+    const { surfaceId, page, pageCount } = contexto();
+
+    // Soltar sobre el paginador manda la tecla a otra pagina: sin esto, mover una
+    // tecla de pagina era imposible salvo editando deck.json.
+    const pagina = pagerEn(ev.clientX, ev.clientY);
+    if (pagina) {
+      const destinoPagina = page + pagina.delta;
+      if (destinoPagina < 0 || destinoPagina >= pageCount) {
+        aviso("No hay página en esa dirección. Añade una desde el menú.");
+        return;
+      }
+      try {
+        await invoke("move_button", {
+          buttonId: fuente.botonId,
+          toSurface: surfaceId,
+          toPage: destinoPagina,
+          toPosition: 0,
+        });
+        await refrescar();
+        aviso(`Tecla movida a la página ${destinoPagina + 1}.`, "info");
+      } catch (e) {
+        aviso(String(e));
+      }
+      return;
+    }
 
     const destino = celdaEn(ev.clientX, ev.clientY);
     if (!destino || destino.botonId === fuente.botonId) return;
 
-    const { surfaceId, page } = contexto();
     try {
       if (destino.esCarpeta && destino.botonId) {
         // Soltar una tecla sobre una carpeta la mete dentro.

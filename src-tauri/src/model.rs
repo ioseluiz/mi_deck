@@ -213,6 +213,15 @@ pub struct DeckButton {
     pub icon: Icon,
     #[serde(deserialize_with = "accion_tolerante")]
     pub action: Action,
+    /// Lo que esta version no conoce de la tecla, conservado tal cual.
+    ///
+    /// `Deck` y `Settings` ya tenian esta red; la tecla era el unico sitio sin
+    /// ella, y es donde mas duele: serde lee bien un campo desconocido pero no
+    /// lo guarda en ningun sitio, asi que **se pierde al primer guardado**, sin
+    /// error y sin aviso. Una version anterior abriendo un deck nuevo vaciaba
+    /// la tecla de todo lo que no entendiera.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 // -------------------------------------------------------------------- iconos
@@ -446,6 +455,52 @@ mod tests_tolerancia {
 
     fn leer(accion: &str) -> DeckButton {
         serde_json::from_str(&boton(accion)).expect("el boton deberia leerse")
+    }
+
+    #[test]
+    fn una_tecla_conserva_lo_que_esta_version_no_entiende() {
+        // `Deck` y `Settings` ya tenian esta red; la tecla era el unico sitio sin
+        // ella, y es donde mas duele. Serde lee bien un campo desconocido pero no
+        // lo guarda en ningun sitio: sin `extra` se perdia al primer guardado, sin
+        // error y sin aviso. Una version anterior abriendo un deck nuevo vaciaba
+        // la tecla de todo lo que no supiera leer.
+        let crudo = r#"{
+            "id": "b1",
+            "position": 0,
+            "label": "Silenciar",
+            "icon": { "type": "auto" },
+            "action": { "type": "hotkey", "keys": "Ctrl+S" },
+            "states": [{ "label": "Activar" }],
+            "live": { "type": "micro_silenciado" }
+        }"#;
+
+        let tecla: DeckButton = serde_json::from_str(crudo).expect("deberia leerse");
+        assert_eq!(tecla.label, "Silenciar", "lo conocido se lee igual");
+        assert!(matches!(tecla.action, Action::Hotkey { .. }));
+
+        let vuelta = serde_json::to_value(&tecla).unwrap();
+        assert!(vuelta.get("states").is_some(), "se perdio `states`");
+        assert!(vuelta.get("live").is_some(), "se perdio `live`");
+        assert_eq!(vuelta["live"]["type"], "micro_silenciado");
+    }
+
+    #[test]
+    fn una_tecla_corriente_no_engorda_el_archivo() {
+        // `extra` vacio no puede meter ruido en deck.json: un deck de siempre
+        // tiene que seguir escribiendose igual, byte a byte.
+        let tecla = leer(r#"{ "type": "hotkey", "keys": "Ctrl+S" }"#);
+        let vuelta = serde_json::to_value(&tecla).unwrap();
+        // El orden lo decide serde_json, no nosotros: lo que importa es que no
+        // aparezca ningun campo de mas.
+        let mut campos: Vec<&str> = vuelta
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        campos.sort();
+
+        assert_eq!(campos, vec!["action", "icon", "id", "label", "position"]);
     }
 
     #[test]

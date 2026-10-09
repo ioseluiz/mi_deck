@@ -986,6 +986,7 @@ fn drop_paths(
                 // Una imagen soltada se convierte en la cara de su propia tecla.
                 icon: images::icono_para(p),
                 action,
+                extra: Default::default(),
             };
             edit::upsert_button(deck, &surface_id, page, boton)?;
             celda = celda.saturating_add(1);
@@ -1019,6 +1020,7 @@ fn drop_url(
                 browser: "default".to_string(),
                 profile: None,
             },
+            extra: Default::default(),
         };
         edit::upsert_button(deck, &surface_id, page, boton)
     })

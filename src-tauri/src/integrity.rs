@@ -280,6 +280,7 @@ mod tests {
                 action: Action::Folder {
                     surface: to.to_string(),
                 },
+                extra: Default::default(),
             });
         }
         Deck {
