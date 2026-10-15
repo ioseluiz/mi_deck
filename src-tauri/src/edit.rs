@@ -707,6 +707,7 @@ mod tests {
         let mut deck = default_deck();
         deck.surfaces.insert("s-sub".into(), Surface::new("Dentro"));
         deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("atrapada", 1)],
         }];
 
@@ -729,6 +730,7 @@ mod tests {
         deck.surfaces
             .insert("s-sub".into(), Surface::new("Carpeta"));
         deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("dentro", 1)],
         }];
         let mut carpeta = boton("bc", 4);
@@ -773,6 +775,7 @@ mod tests {
         let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
         let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
         deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("b1", 3), boton("b2", 7)],
         }];
 
@@ -795,9 +798,11 @@ mod tests {
         let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
         let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
         deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("b1", 3)],
         }];
         deck.surfaces.get_mut(&b).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("suya", 3)],
         }];
 
@@ -816,9 +821,11 @@ mod tests {
         let a = create_profile(&mut deck, "excel.exe", "Excel").unwrap();
         let b = create_profile(&mut deck, "winword.exe", "Word").unwrap();
         deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("b1", 0), boton("b2", 1)],
         }];
         deck.surfaces.get_mut(&b).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("suya", 0)],
         }];
 
@@ -836,6 +843,7 @@ mod tests {
         deck.surfaces
             .insert("s-sub".into(), Surface::new("Pegado especial"));
         deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![boton("dentro", 1)],
         }];
         let mut carpeta = boton("bc", 2);
@@ -843,6 +851,7 @@ mod tests {
             surface: "s-sub".into(),
         };
         deck.surfaces.get_mut(&a).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![carpeta],
         }];
 

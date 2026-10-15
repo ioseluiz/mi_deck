@@ -287,8 +287,13 @@ fn resolver_iconos(deck: &Deck) -> HashMap<String, String> {
                     IconSource::Auto => {
                         destino_para_icono(&button.action).and_then(|t| icons::shell_icon(&t).ok())
                     }
-                    // builtin y emoji los dibuja el frontend.
-                    IconSource::Builtin { .. } | IconSource::Emoji { .. } => None,
+                    // builtin y emoji los dibuja el frontend. Uno desconocido no
+                    // tiene imagen que resolver: la tecla cae en el icono
+                    // generico de su accion y sigue funcionando, que es de lo que
+                    // se trata.
+                    IconSource::Builtin { .. }
+                    | IconSource::Emoji { .. }
+                    | IconSource::Unknown { .. } => None,
                 };
                 if let Some(p) = ruta {
                     mapa.insert(button.id.clone(), p.display().to_string());

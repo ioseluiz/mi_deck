@@ -394,12 +394,14 @@ mod tests {
         let secuencia = Action::Macro {
             steps: vec![
                 MacroStep {
+                    extra: Default::default(),
                     action: Box::new(Action::Hotkey {
                         keys: "Ctrl+C".into(),
                     }),
                     delay_ms: 50,
                 },
                 MacroStep {
+                    extra: Default::default(),
                     action: Box::new(app("cmd.exe", "", "%CARPETA%")),
                     delay_ms: 0,
                 },

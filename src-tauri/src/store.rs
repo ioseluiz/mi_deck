@@ -179,7 +179,9 @@ pub fn default_deck() -> Deck {
         ROOT_ID.to_string(),
         Surface {
             name: "Mi Deck".to_string(),
+            extra: Default::default(),
             pages: vec![Page {
+                extra: Default::default(),
                 buttons: vec![
                     DeckButton {
                         id: "b-explorador".into(),
@@ -237,7 +239,9 @@ pub fn default_deck() -> Deck {
         "s-ejemplos".to_string(),
         Surface {
             name: "Ejemplos".to_string(),
+            extra: Default::default(),
             pages: vec![Page {
+                extra: Default::default(),
                 buttons: vec![
                     DeckButton {
                         id: "b-acp".into(),

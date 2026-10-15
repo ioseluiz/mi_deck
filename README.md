@@ -525,19 +525,40 @@ del dominio sobre un color derivado del propio dominio. El widget no toca la red
 jamás, lo que lo hace inmune al proxy institucional y a trabajar sin conexión. Si
 quieres el logo real, impórtalo como imagen.
 
-### Un tipo de acción que esta versión no conoce
+### Lo que esta versión no conoce
 
-Si `deck.json` trae una acción de una versión más nueva, **no se da el archivo
-por corrupto**. Esa tecla se conserva tal cual bajo `{"type": "unknown",
-"__original": {…}}`, sale en el panel con un triángulo de aviso y, al pulsarla,
-dice de qué tipo es y que hay que actualizar. Al volver a una versión que sí lo
-entienda, la tecla se recupera sola.
+`deck.json` lo puede haber escrito una versión más nueva. Cuando eso pasa, **no se
+da el archivo por corrupto**: lo desconocido se guarda tal cual y reaparece intacto
+al volver a una versión que sí lo entienda.
 
-Hace falta porque sin ello una sola tecla incomprensible invalidaba el archivo
-entero: se respaldaba y se arrancaba de cero, y el usuario veía que había perdido
-las quince. **Esto protege a partir de la v0.2.0**: las versiones anteriores ya
-publicadas no lo llevan, así que bajar de la v0.2.0 a la v0.1.2 con teclas de tipo
-`urls` o `system` sigue siendo destructivo.
+Hay dos mecanismos, según lo que no se entienda.
+
+**Un tipo de acción o de ícono.** Se envuelve en `{"type": "unknown",
+"__original": {…}}`. Una tecla con acción desconocida sale en el panel con un
+triángulo de aviso y, al pulsarla, dice de qué tipo es; una con ícono desconocido
+cae en el ícono genérico de su acción y **sigue funcionando**. El editor conserva
+el original mientras no elijas otro a propósito.
+
+**Un campo nuevo en cualquier nivel.** Se recoge en un mapa aparte y se vuelve a
+escribir al guardar: el deck, los ajustes, una superficie, una página, una tecla,
+una de sus caras, su rueda y cada paso de una macro.
+
+Hace falta porque sin ello la pérdida es **silenciosa**: serde lee un campo que no
+conoce, lo ignora, y al guardar no lo escribe. No hay error ni aviso; simplemente
+ya no está. Y con un tipo desconocido es peor todavía, porque no falla la tecla:
+falla el archivo entero, y entonces se respalda y se arranca de cero. Se midió con
+una sonda antes de taparlo: un solo ícono de un tipo futuro dejaba el panel vacío.
+
+La red se fue poniendo por partes, y **solo protege hacia delante**:
+
+| Desde | Qué quedó protegido |
+|---|---|
+| v0.2.0 | El tipo de acción |
+| v0.3.0 | El deck y los ajustes |
+| v0.4.0 | La tecla, y la fuente de lo que enseña |
+| v0.5.0 | El tipo de ícono, la superficie, la página, la cara, la rueda y el paso de macro |
+
+Bajar a una versión anterior a la de su fila sigue siendo destructivo para eso.
 
 ## Volumen y micrófono
 

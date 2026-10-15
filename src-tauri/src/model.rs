@@ -185,6 +185,9 @@ pub struct Surface {
     pub name: String,
     #[serde(default, deserialize_with = "uno_o_varios")]
     pub pages: Vec<Page>,
+    /// Lo que esta version no conoce, conservado tal cual. Ver `Deck::extra`.
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Surface {
@@ -192,6 +195,7 @@ impl Surface {
         Self {
             name: name.into(),
             pages: vec![Page::default()],
+            extra: Default::default(),
         }
     }
 }
@@ -200,6 +204,9 @@ impl Surface {
 pub struct Page {
     #[serde(default, deserialize_with = "uno_o_varios")]
     pub buttons: Vec<DeckButton>,
+    /// Lo que esta version no conoce, conservado tal cual. Ver `Deck::extra`.
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,7 +216,7 @@ pub struct DeckButton {
     pub position: u32,
     #[serde(default)]
     pub label: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "icono_tolerante")]
     pub icon: Icon,
     #[serde(deserialize_with = "accion_tolerante")]
     pub action: Action,
@@ -248,7 +255,7 @@ pub struct DeckButton {
 pub struct KeyState {
     #[serde(default)]
     pub label: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "icono_tolerante")]
     pub icon: Icon,
     /// Si falta, la cara existe pero no hace nada.
     ///
@@ -259,6 +266,9 @@ pub struct KeyState {
     /// deck perdido, no.
     #[serde(default = "accion_inerte", deserialize_with = "accion_tolerante")]
     pub action: Action,
+    /// Lo que esta version no conoce, conservado tal cual. Ver `Deck::extra`.
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Una accion que no hace nada, para una cara a la que le falta la suya.
@@ -310,6 +320,9 @@ pub struct Rueda {
     pub up: Action,
     #[serde(deserialize_with = "accion_tolerante")]
     pub down: Action,
+    /// Lo que esta version no conoce, conservado tal cual. Ver `Deck::extra`.
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 // -------------------------------------------------------------------- iconos
@@ -352,6 +365,65 @@ pub enum IconSource {
         #[serde(rename = "char")]
         glyph: String,
     },
+    /// Un tipo de icono que esta version no conoce, guardado entero.
+    ///
+    /// La misma red que `Action::Unknown`, y hacia falta igual: `icon` tiene
+    /// `#[serde(default)]`, pero un `default` solo cubre un campo **ausente**, no
+    /// uno que falla al leerse. Medido con una sonda antes de escribir esto: un
+    /// solo icono de un tipo desconocido no estropeaba la tecla, hacia fallar el
+    /// `deck.json` **entero**, y entonces `store` lo da por corrupto, lo respalda
+    /// y arranca de cero. El usuario ve el panel vacio.
+    Unknown {
+        #[serde(rename = "__original")]
+        raw: serde_json::Map<String, serde_json::Value>,
+    },
+}
+
+/// Lee un icono sin que uno desconocido invalide el archivo entero.
+///
+/// Mismos tres casos que `accion_tolerante`, y por el mismo motivo: se entiende,
+/// es un envoltorio que ahora si se entiende y se recupera, o no se entiende y se
+/// conserva tal cual para que reaparezca al volver a una version que lo entienda.
+fn icono_tolerante<'de, D>(d: D) -> Result<Icon, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let valor = serde_json::Value::deserialize(d)?;
+
+    let envolver = |v: serde_json::Value| Icon {
+        source: IconSource::Unknown {
+            raw: match v {
+                serde_json::Value::Object(m) => m,
+                // Ni siquiera es un objeto. Se envuelve igual: una tecla con un
+                // icono raro es un fallo que se ve; un deck perdido, no.
+                otro => {
+                    let mut m = serde_json::Map::new();
+                    m.insert("__valor".to_string(), otro);
+                    m
+                }
+            },
+        },
+        ..Icon::default()
+    };
+
+    match serde_json::from_value::<Icon>(valor.clone()) {
+        Ok(Icon {
+            source: IconSource::Unknown { raw },
+            ..
+        }) => {
+            let interior = serde_json::Value::Object(raw.clone());
+            match serde_json::from_value::<Icon>(interior) {
+                Ok(Icon {
+                    source: IconSource::Unknown { .. },
+                    ..
+                })
+                | Err(_) => Ok(envolver(serde_json::Value::Object(raw))),
+                Ok(recuperado) => Ok(recuperado),
+            }
+        }
+        Ok(conocido) => Ok(conocido),
+        Err(_) => Ok(envolver(valor)),
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -527,6 +599,9 @@ pub struct MacroStep {
     pub action: Box<Action>,
     #[serde(default)]
     pub delay_ms: u32,
+    /// Lo que esta version no conoce, conservado tal cual. Ver `Deck::extra`.
+    #[serde(flatten, default)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 fn default_browser() -> String {
@@ -583,6 +658,7 @@ mod tests_tolerancia {
     fn de_dos_caras() -> DeckButton {
         let mut b = leer(r#"{ "type": "hotkey", "keys": "Ctrl+M" }"#);
         b.states = vec![KeyState {
+            extra: Default::default(),
             label: "Activar".into(),
             icon: Icon::default(),
             action: Action::Hotkey {
@@ -864,6 +940,126 @@ mod tests_tolerancia {
             serde_json::from_str(&serde_json::to_string(&deck).unwrap()).unwrap();
         assert_eq!(valor["profiles"][0]["surface"], "s-excel");
     }
+
+    // ------------------------------- lo que no se conoce, nivel por nivel
+
+    /// Un deck con un campo desconocido metido en cada nivel que no lo tenia.
+    fn deck_con_sobras() -> String {
+        // Delimitador de dos almohadillas: el valor lleva una, y `"#` cerraria
+        // un `r#"` a media cadena.
+        r##"{"version":1,"root":"r","surfaces":{"r":{
+             "name":"Raiz","color_futuro":"#fff","pages":[{
+               "nombre_futuro":"Primera","buttons":[{
+                 "id":"b1","position":0,"label":"A",
+                 "action":{"type":"app","target":"notepad"},
+                 "states":[{"label":"B","action":{"type":"app","target":"calc"},
+                            "sonido_futuro":"ding"}],
+                 "wheel":{"up":{"type":"app","target":"a"},
+                          "down":{"type":"app","target":"b"},
+                          "paso_futuro":5}}]}]}}}"##
+            .to_string()
+    }
+
+    /// Hasta la v0.4.1 la red solo estaba en el deck, los ajustes y la tecla.
+    /// Una version futura que anada un nombre por pagina, un color por superficie
+    /// o un campo a una cara veria como la version anterior se los come al
+    /// guardar, sin error y sin aviso: es el mismo fallo que ya costo ponerle red
+    /// a la tecla, un nivel mas arriba.
+    #[test]
+    fn lo_que_no_se_conoce_sobrevive_en_superficie_pagina_cara_y_rueda() {
+        let deck: Deck = serde_json::from_str(&deck_con_sobras()).expect("deberia leerse");
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&deck).unwrap()).unwrap();
+
+        let s = &v["surfaces"]["r"];
+        assert_eq!(s["color_futuro"], "#fff", "superficie");
+        let p = &s["pages"][0];
+        assert_eq!(p["nombre_futuro"], "Primera", "pagina");
+        let b = &p["buttons"][0];
+        assert_eq!(b["states"][0]["sonido_futuro"], "ding", "cara");
+        assert_eq!(b["wheel"]["paso_futuro"], 5, "rueda");
+        // Y nada de lo conocido se movio de sitio.
+        assert_eq!(s["name"], "Raiz");
+        assert_eq!(b["label"], "A");
+    }
+
+    #[test]
+    fn un_paso_de_macro_conserva_lo_que_no_entiende() {
+        let json = r#"{"id":"b1","position":0,"label":"M","action":{"type":"macro","steps":[
+            {"action":{"type":"app","target":"notepad"},"delay_ms":10,"repetir_futuro":3}]}}"#;
+        let b: DeckButton = serde_json::from_str(json).expect("deberia leerse");
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
+        assert_eq!(v["action"]["steps"][0]["repetir_futuro"], 3);
+        assert_eq!(v["action"]["steps"][0]["delay_ms"], 10);
+    }
+
+    // -------------------------------------------- iconos que no se conocen
+
+    /// Este era el agujero grande, y se midio con una sonda antes de taparlo: un
+    /// solo icono de un tipo desconocido no estropeaba su tecla, hacia fallar el
+    /// `deck.json` entero. Y un deck que no se lee se da por corrupto, se respalda
+    /// y se repone de cero: el usuario abre MiDeck y se encuentra el panel vacio.
+    #[test]
+    fn un_icono_de_un_tipo_futuro_no_tumba_el_deck() {
+        let json = r#"{"version":1,"root":"r","surfaces":{"r":{"name":"Raiz","pages":[{
+            "buttons":[
+              {"id":"b1","position":0,"label":"Rara",
+               "icon":{"type":"tira_gif","file":"x.gif","fps":12},
+               "action":{"type":"app","target":"notepad"}},
+              {"id":"b2","position":1,"label":"Normal",
+               "icon":{"type":"emoji","char":"A"},
+               "action":{"type":"app","target":"calc"}}]}]}}}"#;
+
+        let deck: Deck = serde_json::from_str(json).expect("el deck entero deberia leerse");
+        let botones = &deck.surfaces["r"].pages[0].buttons;
+        assert_eq!(botones.len(), 2, "no se pierde ninguna tecla");
+        // La tecla rara sigue entera: su etiqueta y su accion se respetan.
+        assert_eq!(botones[0].label, "Rara");
+        assert_eq!(botones[0].action.kind(), "app");
+        // Y la de al lado no se contagia.
+        assert!(matches!(botones[1].icon.source, IconSource::Emoji { .. }));
+    }
+
+    #[test]
+    fn un_icono_futuro_reaparece_intacto_al_guardar_y_volver_a_leer() {
+        let json = r#"{"id":"b1","position":0,"label":"X",
+            "icon":{"type":"tira_gif","file":"x.gif","fps":12},
+            "action":{"type":"app","target":"notepad"}}"#;
+        let b: DeckButton = serde_json::from_str(json).unwrap();
+
+        let guardado = serde_json::to_string(&b).unwrap();
+        let relectura: DeckButton = serde_json::from_str(&guardado).unwrap();
+        let IconSource::Unknown { raw } = &relectura.icon.source else {
+            panic!("deberia seguir envuelto: {guardado}");
+        };
+        assert_eq!(raw["type"], "tira_gif");
+        assert_eq!(raw["file"], "x.gif");
+        assert_eq!(raw["fps"], 12, "el icono vuelve entero, no a medias");
+    }
+
+    #[test]
+    fn un_icono_envuelto_se_recupera_cuando_la_version_ya_lo_entiende() {
+        // La gracia de guardar el original: al volver a una version que si conoce
+        // el tipo, el icono vuelve a funcionar solo.
+        let envuelto = r#"{"id":"b1","position":0,"label":"X",
+            "icon":{"type":"unknown","__original":{"type":"emoji","char":"Z"}},
+            "action":{"type":"app","target":"notepad"}}"#;
+        let b: DeckButton = serde_json::from_str(envuelto).unwrap();
+        match &b.icon.source {
+            IconSource::Emoji { glyph } => assert_eq!(glyph, "Z"),
+            otro => panic!("deberia haberse recuperado: {otro:?}"),
+        }
+    }
+
+    #[test]
+    fn un_icono_que_ni_siquiera_es_un_objeto_no_tumba_la_tecla() {
+        let json = r#"{"id":"b1","position":0,"label":"X","icon":42,
+            "action":{"type":"app","target":"notepad"}}"#;
+        let b: DeckButton = serde_json::from_str(json).expect("la tecla deberia leerse");
+        assert!(matches!(b.icon.source, IconSource::Unknown { .. }));
+        assert_eq!(b.label, "X");
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -903,4 +1099,5 @@ impl Action {
             _ => None,
         }
     }
+
 }

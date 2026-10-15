@@ -146,6 +146,7 @@ pub fn importar(
             .pages
             .iter()
             .map(|pagina| Page {
+                extra: Default::default(),
                 buttons: pagina
                     .buttons
                     .iter()
@@ -285,6 +286,7 @@ mod tests {
         deck.surfaces
             .insert("s-sub".into(), Surface::new("Pegado especial"));
         deck.surfaces.get_mut("s-sub").unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![tecla(
                 "b-dentro",
                 1,
@@ -298,6 +300,7 @@ mod tests {
         }];
 
         deck.surfaces.get_mut(&sid).unwrap().pages = vec![Page {
+            extra: Default::default(),
             buttons: vec![
                 tecla(
                     "b-img",

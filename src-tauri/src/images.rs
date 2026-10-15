@@ -496,7 +496,8 @@ mod tests {
         // importar un perfil exportado la imagen SVG se descartaba en silencio y la
         // tecla llegaba sin icono.
         let (_dir, _g) = aislar("svgbytes");
-        let contenido = br#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8"/></svg>"#;
+        let contenido =
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8"/></svg>"#;
 
         let nombre = import_bytes(contenido).unwrap();
         assert!(nombre.ends_with(".svg"), "{nombre}");

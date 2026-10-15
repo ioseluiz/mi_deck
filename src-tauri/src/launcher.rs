@@ -969,6 +969,7 @@ mod tests {
         // lanzamiento, que es lo que ve quien lo ejecuta.
         let accion = Action::Macro {
             steps: vec![MacroStep {
+                extra: Default::default(),
                 action: Box::new(Action::App {
                     target: "notepad.exe".into(),
                     args: String::new(),
@@ -1585,6 +1586,7 @@ mod tests {
 
     fn paso(a: Action, ms: u32) -> crate::model::MacroStep {
         crate::model::MacroStep {
+            extra: Default::default(),
             action: Box::new(a),
             delay_ms: ms,
         }
