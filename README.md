@@ -861,6 +861,18 @@ La lista está **ordenada**: si dos perfiles cubren el mismo ejecutable, gana el
 primero. Por eso es una lista y no un mapa, cuyo orden de recorrido no se puede
 fijar.
 
+### El panel solo se mueve cuando el perfil cambia de verdad
+
+Al cambiar de perfil, la navegación se repliega: si estabas dentro de una carpeta,
+vuelves al primer nivel del perfil nuevo, porque esa carpeta era del anterior.
+
+Pero **solo cuando cambia**. Windows avisa de la aplicación en primer plano en cada
+Alt+Tab, y antes cada aviso replegaba la navegación aunque el destino fuera el mismo
+—incluso sin ningún perfil, donde el destino es siempre la raíz—. Se notaba de dos
+formas que parecían no tener relación: al **crear una tecla dentro de una carpeta**,
+porque abrir y cerrar el editor cambia el primer plano, y «**sin hacer nada**» con
+cualquier cambio de ventana.
+
 ### Crearlos y quitarlos
 
 En **Ajustes → Perfiles por aplicación**. La aplicación se elige de entre las

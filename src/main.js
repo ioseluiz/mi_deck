@@ -155,6 +155,22 @@ function aplicarPerfil(payload) {
     return;
   }
 
+  // Si el perfil que toca es el que ya se ensena, no hay nada que mover.
+  //
+  // Sin esta comprobacion, cualquier cambio de ventana replegaba la navegacion:
+  // `setBase` reinicia la pila siempre que no estes ya en la raiz, asi que estando
+  // dentro de una carpeta te sacaba de ella aunque el perfil fuera el mismo --o
+  // aunque no hubiera perfiles y el destino fuera la raiz de siempre--. Se notaba
+  // de dos formas: al crear una tecla dentro de una carpeta, porque abrir y cerrar
+  // el editor cambia el primer plano, y «sin hacer nada» con cualquier Alt+Tab.
+  //
+  // Cuando el perfil cambia de verdad si se repliega, que es lo decidido en la
+  // fase 6: el panel sigue a la aplicacion aunque estes dentro de una carpeta.
+  if ((perfilActivo.surface ?? null) === perfilMostrado.surface) {
+    pintarAncla();
+    return;
+  }
+
   mostrarPerfil(perfilActivo.surface, perfilActivo.nombre);
 }
 
