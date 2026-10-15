@@ -10,12 +10,28 @@ Rust + Tauri 2. El frontend son módulos ES sin bundler ni `node_modules`.
 
 ## Estado
 
-**Completo.** Fases 1 a 4: navegación con carpetas anidadas, las cuatro
-acciones, imágenes propias por tecla, íconos extraídos de los `.exe`, bandeja del
-sistema, instancia única, persistencia de posición, y edición completa desde la
-interfaz: menú contextual, editor de teclas con vista previa en vivo, ajustes,
-reordenar arrastrando y soltar archivos desde el Explorador, e instalador NSIS
-que no pide permisos de administrador.
+**v0.4.1.** En grueso, y cada cosa con su sección más abajo:
+
+- **El panel.** Carpetas anidadas, páginas, reordenar arrastrando, copiar y pegar
+  teclas, soltar archivos desde el Explorador, bandeja, instancia única, atajo
+  global para traerlo y quitarlo de en medio, y un instalador NSIS que no pide
+  permisos de administrador.
+- **Diez tipos de acción**: aplicación, una o varias direcciones web, carpeta,
+  script, navegar a otra superficie, combinación de teclas, texto literal, el
+  catálogo de acciones de Windows, y macros de varios pasos con pausas. Con doble
+  confirmación para lo destructivo.
+- **Teclas que no se quedan quietas.** Una tecla puede enseñar el volumen, la hora,
+  la batería, la memoria, el disco libre, Bloq Mayús o si una aplicación está
+  abierta; puede tener varias caras que alternan; y la rueda del ratón sobre ella
+  sube y baja algo sin pulsar nada.
+- **Volumen y micrófono por Core Audio**, no simulando teclas multimedia: por eso se
+  puede *leer* en qué porcentaje está, y por eso silenciar el micrófono es posible.
+- **Perfiles por aplicación.** El panel cambia solo según lo que tengas delante, y
+  un perfil se exporta a un archivo que le pasas a un compañero.
+- **La burbuja flotante** cuando el panel estorba, y **`%CARPETA%`**, que resuelve a
+  la carpeta que tienes abierta en el Explorador.
+
+Íconos propios por tecla, sacados del `.exe` o de una biblioteca de imágenes.
 
 Editar `deck.json` a mano sigue siendo posible: `Ctrl+E` lo abre y `F5` lo recarga
 sin reiniciar.
