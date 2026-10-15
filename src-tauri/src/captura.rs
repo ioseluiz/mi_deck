@@ -83,14 +83,14 @@ pub fn guardar(img: &image::RgbaImage, carpeta: &Path) -> Result<PathBuf, String
 }
 
 #[cfg(windows)]
-fn ahora_local() -> (u16, u16, u16, u16, u16, u16) {
+pub fn ahora_local() -> (u16, u16, u16, u16, u16, u16) {
     use windows::Win32::System::SystemInformation::GetLocalTime;
     let t = unsafe { GetLocalTime() };
     (t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
 }
 
 #[cfg(not(windows))]
-fn ahora_local() -> (u16, u16, u16, u16, u16, u16) {
+pub fn ahora_local() -> (u16, u16, u16, u16, u16, u16) {
     (1970, 1, 1, 0, 0, 0)
 }
 

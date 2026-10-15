@@ -19,6 +19,7 @@ pub mod launcher;
 pub mod model;
 pub mod nivel;
 pub mod perfiles;
+pub mod respaldo;
 pub mod screen;
 pub mod sistema;
 pub mod store;
@@ -927,6 +928,60 @@ fn import_profile(path: String, state: State<AppState>) -> Result<DeckView, Stri
     })
 }
 
+// ------------------------------------------------- copia de seguridad entera
+
+/// Guarda el deck entero, con sus imagenes dentro, en un archivo.
+#[tauri::command]
+fn export_backup(path: String, app: AppHandle, state: State<AppState>) -> Result<String, String> {
+    let (y, m, d, hh, mm, _) = captura::ahora_local();
+    let paquete = {
+        let deck = state.deck.lock().unwrap();
+        respaldo::empaquetar(
+            &deck,
+            format!("{y:04}-{m:02}-{d:02} {hh:02}:{mm:02}"),
+            app.package_info().version.to_string(),
+            |archivo| std::fs::read(images::resolve(archivo)).ok(),
+        )
+    };
+
+    let json = serde_json::to_string_pretty(&paquete).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("No se pudo escribir {path}: {e}"))?;
+    Ok(path)
+}
+
+/// Nombre sugerido para el dialogo de guardar, con la fecha dentro.
+#[tauri::command]
+fn export_backup_filename() -> String {
+    let (y, m, d, hh, mm, _) = captura::ahora_local();
+    respaldo::nombre_de_archivo(y, m, d, hh, mm)
+}
+
+/// Restaura un deck entero desde un respaldo. **Reemplaza lo que haya.**
+///
+/// Antes de tocar nada se deja una copia del deck actual al lado de `deck.json`.
+/// Es la misma idea que ya rige en el resto: restaurar la copia equivocada es un
+/// error de un clic, y sin esa red no habria vuelta atras ninguna.
+#[tauri::command]
+fn import_backup(path: String, state: State<AppState>) -> Result<DeckView, String> {
+    let bruto =
+        std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer {path}: {e}"))?;
+    // La misma cortesia que con deck.json: el Bloc de notas escribe BOM.
+    let paquete: respaldo::Respaldo = serde_json::from_str(store::sin_bom(&bruto))
+        .map_err(|e| format!("El archivo no es un respaldo de MiDeck: {e}"))?;
+
+    let restaurado = {
+        let actual = state.deck.lock().unwrap();
+        respaldo::restaurar(paquete, &actual, |bytes| images::import_bytes(bytes).ok())?
+    };
+
+    store::copia_antes_de_restaurar(&state.config_path)?;
+
+    mutar(&state, |d| {
+        *d = restaurado;
+        Ok(())
+    })
+}
+
 /// Resultado de copiar teclas: ademas del deck, cuantas no cupieron.
 #[derive(serde::Serialize)]
 struct Copia {
@@ -1811,6 +1866,9 @@ pub fn run() {
             export_profile,
             export_profile_filename,
             import_profile,
+            export_backup,
+            export_backup_filename,
+            import_backup,
             add_profile_exe,
             remove_profile_exe,
             icon_for_target,

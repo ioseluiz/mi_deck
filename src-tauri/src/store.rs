@@ -122,6 +122,24 @@ fn migrar(deck: &mut Deck, raw: &str) {
     }
 }
 
+/// Aparta el `deck.json` de ahora antes de que un respaldo lo reemplace.
+///
+/// Restaurar la copia equivocada es un error de un clic, y sin esto no habria
+/// vuelta atras: el deck anterior ya no estaria en ningun sitio. Se copia en vez
+/// de renombrar para no dejar a MiDeck un instante sin archivo.
+///
+/// Que no haya nada que apartar no es un fallo: en una instalacion recien hecha
+/// el archivo puede no existir todavia.
+pub fn copia_antes_de_restaurar(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let destino = backup_path(path);
+    fs::copy(path, &destino)
+        .map(|_| ())
+        .map_err(|e| format!("No se pudo guardar una copia de {}: {e}", path.display()))
+}
+
 fn backup_path(path: &Path) -> PathBuf {
     let stamp = timestamp();
     let name = path

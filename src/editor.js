@@ -1548,6 +1548,72 @@ function conectar() {
     await cargarPerfiles();
   });
 
+  $("aj-respaldo-guardar")?.addEventListener("click", async () => {
+    try {
+      error("");
+      const sugerido = await invoke("export_backup_filename");
+      const ruta = await invoke("plugin:dialog|save", {
+        options: {
+          title: "Guardar una copia del deck",
+          defaultPath: sugerido,
+          filters: [{ name: "Copia de MiDeck", extensions: ["json"] }],
+        },
+      });
+      if (!ruta) return;
+      await invoke("export_backup", { path: String(ruta) });
+      error(`Copia guardada en ${ruta}`, "info");
+    } catch (e) {
+      error(String(e));
+    }
+  });
+
+  // Restaurar reemplaza el deck entero, asi que lleva el mismo gesto de dos
+  // pulsaciones que quitar un perfil: un `confirm()` del navegador bloquearia la
+  // ventana entera en un webview de Tauri.
+  $("aj-respaldo-restaurar")?.addEventListener("click", async () => {
+    const boton = $("aj-respaldo-restaurar");
+    if (boton.dataset.armado !== "si") {
+      error(
+        "Pulsa «Restaurar copia…» otra vez para confirmar. Reemplaza TODAS tus " +
+          "teclas por las del archivo. El deck de ahora se guarda al lado de deck.json."
+      );
+      boton.dataset.armado = "si";
+      boton.textContent = "¿Seguro? Reemplaza todo";
+      setTimeout(() => {
+        if (boton.isConnected && boton.dataset.armado === "si") {
+          boton.dataset.armado = "";
+          boton.textContent = "Restaurar copia…";
+          error("");
+        }
+      }, 6000);
+      return;
+    }
+    boton.dataset.armado = "";
+    boton.textContent = "Restaurar copia…";
+
+    try {
+      error("");
+      const ruta = await invoke("plugin:dialog|open", {
+        options: {
+          title: "Abrir una copia del deck",
+          filters: [{ name: "Copia de MiDeck", extensions: ["json"] }],
+        },
+      });
+      if (!ruta) return;
+      const vista = await invoke("import_backup", { path: String(ruta) });
+      pintarHuerfanas(vista);
+      // El respaldo tambien trae ajustes. Sin recargar el formulario seguiria
+      // ensenando los de antes, y el siguiente «Guardar» los volveria a imponer
+      // encima de los recien restaurados.
+      await cargarAjustes(vista);
+      await invoke("notify_deck_changed");
+      await cargarPerfiles();
+      error("Deck restaurado. Se guardó una copia del anterior.", "info");
+    } catch (e) {
+      error(String(e));
+    }
+  });
+
   $("aj-perfil-importar")?.addEventListener("click", async () => {
     try {
       error("");

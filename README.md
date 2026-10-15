@@ -1076,6 +1076,46 @@ La detección es **por ejecutable**, y eso es de Windows, no de MiDeck: `javaw.e
 sistema y no se pueden distinguir entre sí. Afinar por título de ventana sería
 aditivo si algún día estorba.
 
+## Copia de seguridad del deck
+
+*Ajustes → Copia de seguridad* guarda el deck **entero** en un archivo: todas las
+superficies con sus páginas y teclas, los perfiles, los ajustes y las imágenes que
+usan las teclas, en base64 dentro del propio archivo. Sirve para llevártelo a otro
+equipo y para recuperarlo si te reinstalan este.
+
+Es lo que faltaba frente a exportar un perfil: un perfil se comparte, un deck se
+respalda. Son cosas distintas y por eso son dos archivos distintos.
+
+El nombre sugerido lleva la fecha —`mideck-respaldo-20261015-0905.json`— para que
+quien guarde tres copias en una carpeta las distinga sin abrirlas.
+
+### Restaurar reemplaza, y por eso tiene red
+
+Restaurar sustituye todo lo que tengas. Antes de tocar nada se copia el
+`deck.json` actual a `deck.json.bak-<fecha>`, al lado del original: restaurar la
+copia equivocada es un error de un clic, y sin esa red no habría vuelta atrás.
+El botón pide confirmación con dos pulsaciones, el mismo gesto que el resto de
+acciones destructivas.
+
+Las imágenes se vuelven a importar a la biblioteca de este equipo. Como se nombran
+por el hash de su contenido, lo normal es que conserven el nombre; si no, las
+referencias de las teclas se reescriben con el nuevo. Sin eso, la tecla quedaría
+sin ícono y no habría forma de saber por qué.
+
+### Dos ajustes que no se restauran
+
+Viajan dentro del archivo, pero al restaurar se queda el valor de este equipo:
+
+- **La posición de la ventana.** Viene de otra pantalla y aquí puede caer fuera.
+- **El arranque con Windows.** Eso vive en el registro, no en `deck.json`.
+  Restaurarlo dejaría la casilla diciendo que sí y el registro diciendo que no.
+
+### Lo que no va dentro
+
+Las imágenes que **ninguna** tecla usa, y los originales de `icons\original\`. Las
+primeras son basura que MiDeck ya sabe listar y borrar desde Ajustes; los segundos
+solo sirven para reprocesar una imagen y doblarían el tamaño de cada copia.
+
 ## Seguridad
 
 `deck.json` es texto plano y las acciones de tipo `script` ejecutan lo que contengan
