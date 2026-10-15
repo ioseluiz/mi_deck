@@ -6,8 +6,8 @@
 
 pub mod apps;
 pub mod audio;
-pub mod buscar;
 pub mod burbuja;
+pub mod buscar;
 pub mod captura;
 pub mod edit;
 pub mod explorador;

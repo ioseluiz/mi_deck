@@ -12,7 +12,7 @@
  */
 
 import { invoke, urlDeArchivo, apiDisponible } from "./api.js";
-import { iconoPorAccion, setCatalogoSistema } from "./grid.js";
+import { ICONOS, iconoPorAccion, setCatalogoSistema } from "./grid.js";
 
 /**
  * Catalogo de acciones de Windows tal cual lo devuelve Rust: una lista de
@@ -110,7 +110,11 @@ function pintarPrevia() {
   prev.style.background = icon.background || "";
 
   let contenido = "";
-  if (icon.type === "emoji" && icon.char) {
+  if (icon.type === "builtin" && ICONOS[icon.name]) {
+    // Se pinta el SVG tal cual, con sus clases: asi el que se mueve tambien se
+    // mueve en la vista previa, que es donde se decide si gusta o no.
+    contenido = ICONOS[icon.name];
+  } else if (icon.type === "emoji" && icon.char) {
     contenido = escapar(icon.char);
   } else if (icon.type === "image" && icon.src) {
     contenido = `<img src="${escapar(icon.src)}" alt="">`;
@@ -648,6 +652,7 @@ function volcarEnFormulario() {
 
   const icon = tecla.icon ?? {};
   $("ed-emoji").value = icon.type === "emoji" ? icon.char ?? "" : "";
+  pintarIconosElegibles();
   $("ed-fit").value = icon.fit ?? "contain";
   $("ed-labelstyle").value = icon.label_style ?? "below";
   if (icon.background) $("ed-bg").value = icon.background;
@@ -809,6 +814,52 @@ async function pegarImagen() {
   } catch (e) {
     error(String(e));
   }
+}
+
+/**
+ * Iconos propios de MiDeck que se pueden elegir desde aqui.
+ *
+ * Existian los veintiseis desde siempre, pero el editor solo ofrecia imagen o
+ * emoji: para ponerlos habia que editar deck.json a mano. Los que se mueven van
+ * delante porque son la novedad y porque son los que alguien viene buscando.
+ */
+const ICONOS_ELEGIBLES = ["micro-vivo", "volumen-vivo", "rec", "micro-cortado", "micro"]
+  .concat(
+    Object.keys(ICONOS).filter(
+      (n) =>
+        !["micro", "micro-vivo", "micro-cortado", "volumen-vivo", "rec", "back", "aviso"].includes(n)
+    )
+  );
+
+function pintarIconosElegibles() {
+  const caja = $("ed-iconos");
+  if (!caja) return;
+  const actual = tecla.icon?.type === "builtin" ? tecla.icon.name : null;
+  caja.innerHTML = ICONOS_ELEGIBLES.map(
+    (n) =>
+      `<button type="button" class="icono-op" data-icono="${escapar(n)}" ` +
+      `title="${escapar(n)}" aria-pressed="${n === actual}">${ICONOS[n]}</button>`
+  ).join("");
+}
+
+/** Pone o quita un icono de MiDeck. */
+function elegirIconoIntegrado(nombre) {
+  const actual = tecla.icon?.type === "builtin" ? tecla.icon.name : null;
+  if (actual === nombre) {
+    // Volver a pulsar el elegido lo quita: sin esto no habria forma de
+    // arrepentirse salvo poniendo otro.
+    tecla.icon = { ...tecla.icon, type: "auto" };
+    delete tecla.icon.name;
+  } else {
+    tecla.icon = { ...tecla.icon, type: "builtin", name: nombre };
+    // Un icono propio sustituye a la imagen y al emoji, que son la misma cara.
+    delete tecla.icon.file;
+    delete tecla.icon.src;
+    delete tecla.icon.char;
+    $("ed-emoji").value = "";
+  }
+  pintarIconosElegibles();
+  pintarPrevia();
 }
 
 function aplicarImagen(archivo) {
@@ -1361,6 +1412,11 @@ function conectar() {
     pintarPrevia();
   });
 
+  $("ed-iconos")?.addEventListener("click", (ev) => {
+    const b = ev.target?.closest?.(".icono-op");
+    if (b) elegirIconoIntegrado(b.dataset.icono);
+  });
+
   $("ed-img-elegir").addEventListener("click", () => elegirImagen().catch((e) => error(String(e))));
   $("ed-img-pegar").addEventListener("click", () => pegarImagen());
   $("ed-img-quitar").addEventListener("click", () => {
@@ -1369,6 +1425,7 @@ function conectar() {
     delete tecla.icon.src;
     delete tecla.icon.char;
     $("ed-emoji").value = "";
+    pintarIconosElegibles();
     pintarPrevia();
   });
 

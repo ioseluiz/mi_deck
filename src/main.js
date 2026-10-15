@@ -250,6 +250,10 @@ const IMAGEN_VACIA =
  * @param {boolean} congelar
  */
 function congelarAnimadas(congelar) {
+  // Los iconos integrados se mueven con CSS, asi que basta una clase en el body:
+  // `animation-play-state: paused` los para todos a la vez.
+  document.body.classList.toggle("sin-ver", congelar);
+
   for (const img of document.querySelectorAll("img.key-animada")) {
     if (congelar) {
       if (!img.dataset.viva) img.dataset.viva = img.src;

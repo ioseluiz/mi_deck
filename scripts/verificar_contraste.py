@@ -57,6 +57,10 @@ EXIGENCIAS = [
     # son graficos de interfaz (WCAG 1.4.11).
     ("resultado marcado sobre el panel", "--acento", "--fondo", 3.0),
     ("contorno de tecla hallada sobre la tecla", "--acento", "--tecla", 3.0),
+    # El punto de grabacion es lo unico que no sigue el tema: es rojo porque esa
+    # es la convencion. Como es un grafico, 3:1 sobre la tecla (WCAG 1.4.11). Y no
+    # va solo: lleva la palabra REC al lado, para no depender del color.
+    ("punto de grabacion sobre la tecla", "--rec", "--tecla", 3.0),
     ("borde de arranque roto sobre el panel", "#9a4a53", "--fondo", 3.0),
     # La burbuja flotante vive sobre lo que sea: su fondo no se puede comprobar
     # contra nada fijo. Lo que si tiene que cumplir es que su icono se distinga

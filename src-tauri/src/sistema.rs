@@ -258,7 +258,7 @@ const CATALOGO: &[ComandoInfo] = &[
             S::MicMute,
             "Silenciar el microfono",
             Multimedia,
-            "silencio",
+            "micro-cortado",
             Api,
         )
     },

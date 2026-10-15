@@ -428,7 +428,7 @@ dejar diez Outlooks.
 |---|---|---|
 | `image` | `file` | Nombre dentro de la biblioteca (ver abajo). |
 | `auto` | — | Extrae el ícono de shell del destino. Para una acción `url` dibuja una pastilla con la inicial del dominio. |
-| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file`, `keyboard`, `text`, `pestanas`, `camara`, `video`, `play`, `siguiente`, `anterior`, `volumen-mas`, `volumen-menos`, `silencio`, `candado`, `escritorio`, `ventanas`, `portapapeles`, `emoji`, `escritorio-izq`, `escritorio-der`, `monitor`, `ajustes` | |
+| `builtin` | `name`: `folder`, `folder-open`, `globe`, `terminal`, `app`, `file`, `keyboard`, `text`, `pestanas`, `camara`, `video`, `play`, `siguiente`, `anterior`, `volumen-mas`, `volumen-menos`, `silencio`, `micro`, `micro-cortado`, `candado`, `escritorio`, `ventanas`, `portapapeles`, `emoji`, `escritorio-izq`, `escritorio-der`, `monitor`, `ajustes`, y los tres que se mueven: `micro-vivo`, `volumen-vivo`, `rec` | Se eligen desde el editor, en *Cara de la tecla*. |
 | `emoji` | `char` | |
 
 Comunes a todos:
@@ -470,6 +470,33 @@ cargo run --example importar_imagen -- "C:\ruta\logo.png"
 Al borrar un botón su imagen **no** se borra: un borrado automático convertiría un
 error de edición en una pérdida de trabajo. Limpiarlas es una acción explícita
 desde Ajustes.
+
+### Íconos que se mueven, sin traer nada
+
+Tres de los íconos propios se animan: **`micro-vivo`** y **`volumen-vivo`**, con
+ondas que salen y se desvanecen, y **`rec`**, con el punto de grabación
+parpadeando junto a la palabra REC. Se eligen desde el editor como cualquier
+otro, sin buscar ni importar nada.
+
+Van en **CSS sobre el SVG, no en GIF**, y la diferencia importa:
+
+| | GIF | SVG animado |
+|---|---|---|
+| Tamaño | Cientos de KB en el binario | Cero bytes de más |
+| Al subir `key_size` | Se ve borroso | Nítido a cualquier tamaño |
+| Color | El que traiga grabado | El del tema, por `fill` |
+| Pararlos todos | Un `<img>` por tecla | Una regla CSS |
+
+Se paran con el panel oculto, igual que los GIF y por el mismo motivo, pero aquí
+sale más barato: una clase en el `body` y `animation-play-state: paused`.
+
+Y respetan `prefers-reduced-motion`: quien pide menos movimiento no quiere una
+tecla latiéndole en la esquina de la pantalla todo el día. Con esa preferencia
+las ondas se quedan quietas y visibles, y el punto deja de parpadear.
+
+El punto de grabación es lo único que no sigue el tema: es rojo porque esa es la
+convención en todas partes. No depende solo del color —lleva la palabra REC al
+lado— y su tono se eligió para llegar a 3:1 sobre la propia tecla.
 
 ### GIF animados, y el freno que necesitan
 

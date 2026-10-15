@@ -37,6 +37,27 @@ export const ICONOS = {
     '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 3h18a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-7v2h3v2H8v-2h3v-2H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1m9 3.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9m0 2.2a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 1 1 0-4.6"/></svg>',
   "camara-ventana":
     '<svg viewBox="0 0 24 24" fill-rule="evenodd"><path d="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m1 4v10h16V8zm8 1.5a4 4 0 1 0 0 8 4 4 0 1 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 1 1 0-4"/></svg>',
+  micro:
+    '<svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3m-5 8h2a3 3 0 0 0 6 0h2a5 5 0 0 1-4 4.9V19h3v2H8v-2h3v-3.1A5 5 0 0 1 7 11"/></svg>',
+  "micro-cortado":
+    '<svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-.1.8L9.2 7.1A3 3 0 0 1 12 3M7 11h2a3 3 0 0 0 4.3 2.7l1.5 1.5A5 5 0 0 1 13 16v3h3v2H8v-2h3v-3.1A5 5 0 0 1 7 11M4.3 3.6 20.4 19.7 19 21.1 2.9 5z"/></svg>',
+  // Microfono en uso: dos ondas que salen y se desvanecen. Es lo que distingue
+  // «el micro esta abierto» de «hay una tecla de micro», que con un icono quieto
+  // se ven igual.
+  "micro-vivo":
+    '<svg viewBox="0 0 24 24" class="ico-vivo"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3m-5 8h2a3 3 0 0 0 6 0h2a5 5 0 0 1-4 4.9V19h3v2H8v-2h3v-3.1A5 5 0 0 1 7 11"/>'
+    + '<path class="ico-onda ico-onda--1" fill="none" stroke="currentColor" stroke-width="1.6" d="M17.5 6.5a7 7 0 0 1 0 7"/>'
+    + '<path class="ico-onda ico-onda--2" fill="none" stroke="currentColor" stroke-width="1.6" d="M20 4.5a10.5 10.5 0 0 1 0 11"/></svg>',
+  // Volumen sonando: el mismo recurso, sobre el altavoz que ya existia.
+  "volumen-vivo":
+    '<svg viewBox="0 0 24 24" class="ico-vivo"><path d="M4 9h3l5-4v14l-5-4H4z"/>'
+    + '<path class="ico-onda ico-onda--1" fill="none" stroke="currentColor" stroke-width="1.8" d="M15.5 9a4.5 4.5 0 0 1 0 6"/>'
+    + '<path class="ico-onda ico-onda--2" fill="none" stroke="currentColor" stroke-width="1.8" d="M18.5 6.5a9 9 0 0 1 0 11"/></svg>',
+  // Grabando: el punto parpadea, que es como se ensena en todas partes.
+  rec:
+    '<svg viewBox="0 0 24 24" class="ico-vivo"><circle class="ico-punto" cx="5" cy="12" r="3.2"/>'
+    + '<text x="10" y="12" font-size="9" font-weight="700" font-family="system-ui, sans-serif"'
+    + ' dominant-baseline="central" letter-spacing="-0.3">REC</text></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
   siguiente:
     '<svg viewBox="0 0 24 24"><path d="M5 5v14l9-7zM16 5h3v14h-3z"/></svg>',

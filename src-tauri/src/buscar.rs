@@ -228,7 +228,13 @@ mod tests {
                 pages: vec![Page {
                     buttons: vec![
                         boton("b-out", "Outlook", app("outlook.exe")),
-                        boton("b-sia", "SIA", Action::Folder { surface: "s1".into() }),
+                        boton(
+                            "b-sia",
+                            "SIA",
+                            Action::Folder {
+                                surface: "s1".into(),
+                            },
+                        ),
                     ],
                     extra: Default::default(),
                 }],
@@ -243,7 +249,9 @@ mod tests {
                     buttons: vec![boton(
                         "b-inf",
                         "Informes",
-                        Action::Folder { surface: "s2".into() },
+                        Action::Folder {
+                            surface: "s2".into(),
+                        },
                     )],
                     extra: Default::default(),
                 }],
@@ -255,7 +263,11 @@ mod tests {
             Surface {
                 name: "Informes".into(),
                 pages: vec![Page {
-                    buttons: vec![boton("b-mes", "Cámara mensual", app("C:/informes/mes.xlsx"))],
+                    buttons: vec![boton(
+                        "b-mes",
+                        "Cámara mensual",
+                        app("C:/informes/mes.xlsx"),
+                    )],
                     extra: Default::default(),
                 }],
                 extra: Default::default(),
@@ -351,7 +363,9 @@ mod tests {
             s.pages[0].buttons.push(boton(
                 "b-vuelta",
                 "Atras",
-                Action::Folder { surface: "r".into() },
+                Action::Folder {
+                    surface: "r".into(),
+                },
             ));
         }
         let r = buscar(&deck, "outlook", 10);

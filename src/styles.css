@@ -24,6 +24,9 @@
   /* Tecla armada: ya se pulso una vez y espera confirmacion. */
   --armada: #a8232e;
   --armada-borde: #e2555f;
+  /* Rojo del punto de grabacion. Mas claro que el de la tecla armada porque
+     tiene que llegar a 3:1 sobre la propia tecla, no sobre el panel. */
+  --rec: #ff7a82;
 
   --cols: 5;
   --rows: 3;
@@ -745,4 +748,60 @@ body {
 .key--hallada {
   outline: 2px solid var(--acento);
   outline-offset: 2px;
+}
+
+/* ------------------------------------------------- iconos que se mueven */
+
+/* Los integrados se animan con CSS y no con un GIF. Un GIF traeria clavadas su
+   resolucion --borroso al subir `key_size`-- y sus colores, que no seguirian el
+   tema; estos son SVG en el DOM, pesan cero bytes de mas y heredan `fill`.
+
+   Y se paran todos de golpe, que con un GIF por tecla no se podia. */
+@keyframes ico-onda {
+  0%   { opacity: 0;   transform: translateX(-2px); }
+  25%  { opacity: 0.9; }
+  70%  { opacity: 0;   transform: translateX(1.5px); }
+  100% { opacity: 0; }
+}
+
+.ico-onda {
+  transform-origin: center;
+  animation: ico-onda 1.8s ease-out infinite;
+}
+
+/* La segunda sale despues: dos ondas a la vez son una linea gruesa, no una onda. */
+.ico-onda--2 {
+  animation-delay: 0.45s;
+}
+
+@keyframes ico-punto {
+  0%, 45%   { opacity: 1; }
+  55%, 100% { opacity: 0.15; }
+}
+
+/* El punto de grabacion es rojo aunque lo demas siga el tema: es la convencion
+   en todas partes, y lo que hace que se lea de un vistazo. No depende solo del
+   color, porque va con la palabra REC al lado. */
+.ico-punto {
+  fill: var(--rec);
+  animation: ico-punto 1.2s steps(1, end) infinite;
+}
+
+/* Con el panel oculto no hay nada que mirar. Es el mismo motivo por el que se le
+   quita el archivo a los GIF, y aqui sale mas barato: una regla. */
+body.sin-ver .ico-onda,
+body.sin-ver .ico-punto {
+  animation-play-state: paused;
+}
+
+/* Quien pide menos movimiento no quiere que una tecla le lata en la esquina de la
+   pantalla todo el dia. */
+@media (prefers-reduced-motion: reduce) {
+  .ico-onda,
+  .ico-punto {
+    animation: none;
+  }
+  .ico-onda {
+    opacity: 0.55;
+  }
 }

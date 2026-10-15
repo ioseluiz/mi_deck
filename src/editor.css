@@ -472,3 +472,46 @@ textarea {
   color: var(--texto-tenue);
   font-size: 11.5px;
 }
+
+/* ------------------------------------------- iconos propios de MiDeck */
+
+/* Una rejilla que se adapta al ancho de la columna, en vez de un desplegable con
+   veintiséis nombres: lo que distingue un icono de otro es verlo. */
+.iconos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  max-height: 188px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--vacia);
+  border: 1px solid var(--borde-tecla);
+  border-radius: 7px;
+}
+
+.icono-op {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 6px;
+  color: var(--texto);
+  background: var(--tecla);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.icono-op:hover {
+  background: var(--tecla-hover);
+}
+
+.icono-op[aria-pressed="true"] {
+  border-color: var(--acento);
+  outline: 1px solid var(--acento);
+}
+
+.icono-op svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--texto);
+}

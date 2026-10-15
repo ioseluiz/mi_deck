@@ -1099,5 +1099,4 @@ impl Action {
             _ => None,
         }
     }
-
 }
