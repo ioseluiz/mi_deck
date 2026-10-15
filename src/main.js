@@ -22,6 +22,7 @@ import { conectarSoltarArchivos, conectarReordenar, huboArrastre } from "./dnd.j
 const $grid = /** @type {HTMLElement} */ (document.getElementById("grid"));
 const $migas = /** @type {HTMLElement} */ (document.getElementById("breadcrumbs"));
 const $pager = /** @type {HTMLElement} */ (document.getElementById("pager"));
+const $version = /** @type {HTMLElement} */ (document.getElementById("version"));
 const $pageLabel = /** @type {HTMLElement} */ (document.getElementById("page-label"));
 const $prev = /** @type {HTMLButtonElement} */ (document.getElementById("btn-prev"));
 const $next = /** @type {HTMLButtonElement} */ (document.getElementById("btn-next"));
@@ -1000,6 +1001,16 @@ async function iniciar() {
 
   // El catalogo de acciones de Windows trae el icono de cada comando. Se pide
   // antes de la primera pintada para que ninguna tecla salga con el generico.
+  // La version sale de Rust, no de una constante aqui: duplicarla significa que
+  // un dia la barra ensene una y el programa sea otro.
+  try {
+    $version.textContent = `v${await invoke("app_version")}`;
+  } catch (e) {
+    // Sin version la barra se ve rara, pero el panel funciona: no es motivo para
+    // tumbar el arranque.
+    console.warn("[MiDeck] no se pudo leer la version:", e);
+  }
+
   setCatalogoSistema(await invoke("list_system_commands"));
 
   const vista = await invoke("get_deck");

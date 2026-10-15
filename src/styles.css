@@ -76,6 +76,20 @@ body {
   flex: 0 0 auto;
 }
 
+/* La version, pegada al nombre del deck.
+   `margin-right: auto` es lo que la mantiene a la izquierda: la barra reparte el
+   espacio sobrante y, sin esto, la version quedaria flotando en mitad del hueco.
+   Y no encoge nunca, para que una ruta larga de migas no se la coma. */
+#version {
+  color: var(--texto-tenue);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+  flex: 0 0 auto;
+  opacity: 0.75;
+  cursor: default;
+}
+
 #breadcrumbs {
   display: flex;
   align-items: center;

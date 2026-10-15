@@ -1446,6 +1446,16 @@ fn list_system_commands() -> Vec<sistema::Grupo> {
     sistema::agrupado()
 }
 
+/// La version de la aplicacion, para ensenarla en la barra de titulo.
+///
+/// Sale del propio paquete y no de una constante escrita a mano: una version
+/// duplicada en el frontend se queda vieja a la primera que alguien suba la de
+/// Cargo.toml y se olvide de la otra, y entonces la barra miente.
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 /// Avisa a todas las ventanas de que el deck cambio, para que se repinten.
 #[tauri::command]
 fn notify_deck_changed(app: AppHandle) {
@@ -1770,7 +1780,8 @@ pub fn run() {
             add_profile_exe,
             remove_profile_exe,
             icon_for_target,
-            notify_deck_changed
+            notify_deck_changed,
+            app_version
         ])
         .setup(move |app| {
             // El protocolo asset: solo sirve lo que se le permite explicitamente.
