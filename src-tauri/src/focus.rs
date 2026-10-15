@@ -170,7 +170,7 @@ pub fn vigilar_primer_plano(avisar: impl Fn(String) + Send + 'static) {
         );
         if gancho.is_invalid() {
             eprintln!(
-                "[MiDeck] no se pudo vigilar el primer plano: los atajos dirigidos a                  otra aplicacion llegaran al panel en vez de a ella."
+                "[MiDeck] no se pudo vigilar el primer plano: los atajos dirigidos a otra aplicacion llegaran al panel en vez de a ella."
             );
         }
         // El gancho se deja instalado el resto de la vida del proceso: no hay

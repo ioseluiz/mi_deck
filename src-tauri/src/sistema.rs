@@ -185,7 +185,7 @@ const CATALOGO: &[ComandoInfo] = &[
     },
     ComandoInfo {
         aviso: Some(
-            "Guarda un PNG de todos los monitores. La carpeta y si se copia al              portapapeles se eligen en Ajustes.",
+            "Guarda un PNG de todos los monitores. La carpeta y si se copia al portapapeles se eligen en Ajustes.",
         ),
         ..c(
             S::ScreenshotFull,
@@ -197,7 +197,7 @@ const CATALOGO: &[ComandoInfo] = &[
     },
     ComandoInfo {
         aviso: Some(
-            "Captura la ventana que tuvieras delante antes de pulsar el panel, no              el panel. Sale entera aunque estuviera tapada.",
+            "Captura la ventana que tuvieras delante antes de pulsar el panel, no el panel. Sale entera aunque estuviera tapada.",
         ),
         ..c(
             S::ScreenshotWindow,
@@ -252,7 +252,7 @@ const CATALOGO: &[ComandoInfo] = &[
     ),
     ComandoInfo {
         aviso: Some(
-            "Corta y abre el microfono predeterminado. No hay tecla de teclado para              esto: va por la API de audio de Windows, asi que lo ve cualquier              programa que lo este usando.",
+            "Corta y abre el microfono predeterminado. No hay tecla de teclado para esto: va por la API de audio de Windows, asi que lo ve cualquier programa que lo este usando.",
         ),
         ..c(
             S::MicMute,

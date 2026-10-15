@@ -120,7 +120,7 @@ impl std::fmt::Display for LaunchError {
                     // se busco y como arreglarlo, no solo que no aparecio.
                     write!(
                         f,
-                        "No se encontro {target}: no esta en el PATH ni registrado                          en Windows. Pon la ruta completa al ejecutable."
+                        "No se encontro {target}: no esta en el PATH ni registrado en Windows. Pon la ruta completa al ejecutable."
                     )
                 }
             }
@@ -600,10 +600,19 @@ pub fn build_launch(action: &Action) -> Result<LaunchSpec, LaunchError> {
             // que es la forma natural de equivocarse al querer "abrir una
             // consola aqui". Es la unica vez que esta funcion mira el disco, y
             // vale la pena: la alternativa es un fallo invisible.
+            //
+            // El mensaje mandaba antes a una accion Aplicacion con carpeta de
+            // trabajo, y era un mal consejo: esa accion crea la consola oculta
+            // --`no_window` siempre-- asi que el comando corria donde nadie lo
+            // veia. Lo correcto es quedarse en este tipo de accion y meter el
+            // `cd` en el comando, sin comillas: medido, con ellas no funciona.
             if Path::new(&target).is_dir() {
                 return Err(LaunchError::Invalid {
                     motivo: format!(
-                        "«{target}» es una carpeta, no un script ni un comando. Para abrir                          una consola dentro de ella, usa una accion Aplicacion con                          powershell.exe y esa carpeta en «Carpeta de trabajo»."
+                        "«{target}» es una carpeta, no un script ni un comando. Para abrir \
+                         una consola ahi, deja este tipo de accion y escribe el comando asi: \
+                         cd /d {target} && lo-que-quieras. Sin comillas, aunque la ruta tenga \
+                         espacios, y desmarca «Sin ventana»."
                     ),
                 });
             }
@@ -1044,10 +1053,7 @@ mod tests {
             e.contains("carpeta"),
             "deberia decir que es una carpeta: {e}"
         );
-        assert!(
-            e.contains("Carpeta de trabajo"),
-            "deberia decir como se hace bien: {e}"
-        );
+        assert!(e.contains("cd /d"), "deberia decir como se hace bien: {e}");
     }
 
     #[test]
@@ -1528,7 +1534,7 @@ mod tests {
     #[test]
     fn las_lineas_en_blanco_no_cuentan_como_direcciones() {
         // El campo es un area de texto: sobran saltos de linea al final.
-        let spec = build_launch(&urls(&["  https://a  ", "   ", ""], "default", false)).unwrap();
+        let spec = build_launch(&urls(&["  https://a  ", " ", ""], "default", false)).unwrap();
         assert_eq!(
             spec,
             LaunchSpec::Secuencia(vec![Paso::seguido(LaunchSpec::Shell {

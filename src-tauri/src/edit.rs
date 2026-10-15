@@ -475,7 +475,7 @@ pub fn remove_profile_exe(deck: &mut Deck, id: &str, exe: &str) -> Result<(), St
 
     if perfil.exes.len() <= 1 {
         return Err(
-            "Es el unico ejecutable del perfil: sin el no se activaria nunca.              Quita el perfil entero si ya no lo quieres."
+            "Es el unico ejecutable del perfil: sin el no se activaria nunca. Quita el perfil entero si ya no lo quieres."
                 .to_string(),
         );
     }
