@@ -19,6 +19,14 @@ use crate::model::{Deck, IconSource};
 /// key_size o en pantallas HiDPI, y cuesta unos 40 KB por imagen.
 const LADO: u32 = 256;
 
+/// Tope para guardar un GIF animado tal cual. Por encima se guarda el primer
+/// fotograma, que es lo que MiDeck hacia con todos hasta ahora.
+///
+/// Un GIF animado no se puede reescalar sin recodificar la animacion entera, asi
+/// que entra con el tamano y las dimensiones que traiga: decodificarlo lo paga el
+/// webview en cada vuelta, para siempre, aunque la tecla mida 72 px.
+const MAX_GIF: usize = 2 * 1024 * 1024;
+
 /// Formatos que se aceptan al importar.
 const EXTENSIONES: &[&str] = &[
     "png", "jpg", "jpeg", "webp", "bmp", "ico", "gif", "tiff", "tif", "svg",
@@ -38,7 +46,7 @@ impl std::fmt::Display for ImageError {
             ImageError::NoExiste(p) => write!(f, "No se encontro la imagen: {}", p.display()),
             ImageError::FormatoNoSoportado(e) => write!(
                 f,
-                "El formato .{e} no se admite. Usa PNG, JPG, WEBP, BMP, ICO o SVG."
+                "El formato .{e} no se admite. Usa PNG, JPG, WEBP, BMP, ICO, GIF o SVG."
             ),
             ImageError::NoSePudoLeer(e) => write!(f, "No se pudo leer la imagen: {e}"),
             ImageError::NoSePudoEscribir(e) => write!(f, "No se pudo guardar la imagen: {e}"),
@@ -95,10 +103,10 @@ pub fn import(src: &Path) -> Result<String, ImageError> {
 
     fs::create_dir_all(originals_dir()).map_err(|e| ImageError::NoSePudoEscribir(e.to_string()))?;
 
-    // El SVG se guarda tal cual: el webview lo renderiza nativo y escala sin
-    // perdida, asi que rasterizarlo solo empeoraria el resultado.
-    if ext == "svg" {
-        let nombre = format!("{hash}.svg");
+    // Hay dos formatos que se guardan tal cual, y se decide por el contenido y no
+    // por la extension: quien renombra un .gif a .png no cambia lo que hay dentro.
+    if let Some(ext) = intacto(&bytes) {
+        let nombre = format!("{hash}.{ext}");
         let destino = library_dir().join(&nombre);
         if !destino.exists() {
             fs::write(&destino, &bytes).map_err(|e| ImageError::NoSePudoEscribir(e.to_string()))?;
@@ -131,13 +139,28 @@ pub fn import(src: &Path) -> Result<String, ImageError> {
     Ok(nombre)
 }
 
-/// Importa una imagen que llega como bytes en bruto, por ejemplo del portapapeles.
+/// Importa una imagen que llega como bytes en bruto: del portapapeles, o de un
+/// perfil exportado que trae sus imagenes dentro.
 pub fn import_bytes(bytes: &[u8]) -> Result<String, ImageError> {
     let hash = hash_corto(bytes);
-    let nombre = format!("{hash}.png");
-    let destino = library_dir().join(&nombre);
 
     fs::create_dir_all(library_dir()).map_err(|e| ImageError::NoSePudoEscribir(e.to_string()))?;
+
+    // Lo mismo que al importar por ruta. Esto antes solo sabia escribir PNG, y era
+    // un agujero: un perfil exportado con un icono SVG llegaba al otro equipo *sin
+    // icono*, porque `load_from_memory` no entiende SVG y la imagen se descartaba
+    // en silencio en `intercambio::importar`.
+    if let Some(ext) = intacto(bytes) {
+        let nombre = format!("{hash}.{ext}");
+        let destino = library_dir().join(&nombre);
+        if !destino.exists() {
+            fs::write(&destino, bytes).map_err(|e| ImageError::NoSePudoEscribir(e.to_string()))?;
+        }
+        return Ok(nombre);
+    }
+
+    let nombre = format!("{hash}.png");
+    let destino = library_dir().join(&nombre);
     if destino.exists() {
         return Ok(nombre);
     }
@@ -149,6 +172,60 @@ pub fn import_bytes(bytes: &[u8]) -> Result<String, ImageError> {
         .map_err(|e| ImageError::NoSePudoEscribir(e.to_string()))?;
 
     Ok(nombre)
+}
+
+/// Con que extension guardar unos bytes que no hay que tocar, o `None` si son una
+/// imagen fija que gana normalizandose a PNG como las demas.
+///
+/// Se mira el contenido y no la extension a proposito: lo que decide si una imagen
+/// se anima es lo que lleva dentro.
+fn intacto(bytes: &[u8]) -> Option<&'static str> {
+    decidir(es_svg(bytes), fotogramas(bytes), bytes.len())
+}
+
+/// La decision sola, sin leer ni escribir nada, para poder probar el tope sin
+/// fabricar dos megas de GIF.
+fn decidir(svg: bool, fotogramas: usize, bytes: usize) -> Option<&'static str> {
+    // El webview renderiza el SVG nativo y lo escala sin perdida, asi que
+    // rasterizarlo solo empeoraria el resultado.
+    if svg {
+        return Some("svg");
+    }
+    // Un GIF de un solo fotograma es una imagen fija y no gana nada quedandose
+    // como GIF: pasa por el camino normal y acaba en PNG de 256 px.
+    if fotogramas > 1 && bytes <= MAX_GIF {
+        return Some("gif");
+    }
+    None
+}
+
+fn es_svg(bytes: &[u8]) -> bool {
+    // Basta con el principio: un SVG puede abrir con la declaracion XML, con un
+    // comentario o con la etiqueta misma, pero `<svg` aparece pronto.
+    let cabeza = &bytes[..bytes.len().min(1024)];
+    String::from_utf8_lossy(cabeza)
+        .to_ascii_lowercase()
+        .contains("<svg")
+}
+
+/// Cuantos fotogramas tiene un GIF, contando como mucho dos.
+///
+/// Solo hace falta saber si pasa de uno, y parar ahi es lo que evita decodificar
+/// una animacion larga entera nada mas para responder que si.
+fn fotogramas(bytes: &[u8]) -> usize {
+    if !bytes.starts_with(b"GIF87a") && !bytes.starts_with(b"GIF89a") {
+        return 0;
+    }
+    use image::codecs::gif::GifDecoder;
+    use image::AnimationDecoder;
+    let Ok(decodificador) = GifDecoder::new(std::io::Cursor::new(bytes)) else {
+        return 0;
+    };
+    decodificador
+        .into_frames()
+        .take(2)
+        .filter(|f| f.is_ok())
+        .count()
 }
 
 fn hash_corto(bytes: &[u8]) -> String {
@@ -351,6 +428,89 @@ mod tests {
         let nombre = import(&src).unwrap();
         assert!(nombre.ends_with(".svg"));
         assert_eq!(fs::read(resolve(&nombre)).unwrap(), contenido);
+    }
+
+    /// Un GIF de `cuantos` fotogramas, alternando tono para que no se colapsen.
+    fn escribir_gif(dir: &Path, nombre: &str, cuantos: usize, lado: u32) -> PathBuf {
+        use image::codecs::gif::GifEncoder;
+        use image::{Delay, Frame, Rgba, RgbaImage};
+
+        let ruta = dir.join(nombre);
+        {
+            let mut enc = GifEncoder::new(fs::File::create(&ruta).unwrap());
+            for i in 0..cuantos {
+                let tono = if i % 2 == 0 { 40 } else { 200 };
+                let img = RgbaImage::from_pixel(lado, lado, Rgba([tono, tono, tono, 255]));
+                enc.encode_frame(Frame::from_parts(
+                    img,
+                    0,
+                    0,
+                    Delay::from_numer_denom_ms(100, 1),
+                ))
+                .unwrap();
+            }
+        }
+        ruta
+    }
+
+    #[test]
+    fn un_gif_animado_se_guarda_tal_cual_para_que_siga_animandose() {
+        // Hasta la v0.4.1 esto acababa en un PNG del primer fotograma: la tecla se
+        // quedaba quieta y no habia forma de saber por que.
+        let (dir, _g) = aislar("gifanimado");
+        let src = escribir_gif(&dir, "late.gif", 3, 64);
+
+        let nombre = import(&src).unwrap();
+        assert!(nombre.ends_with(".gif"), "se rasterizo: {nombre}");
+        assert_eq!(
+            fs::read(resolve(&nombre)).unwrap(),
+            fs::read(&src).unwrap(),
+            "reescribirlo perderia fotogramas"
+        );
+    }
+
+    #[test]
+    fn un_gif_de_un_solo_fotograma_se_normaliza_como_cualquier_imagen_fija() {
+        // No hay animacion que conservar, asi que gana pasando por el camino de
+        // siempre: 256 px de lado mayor y PNG.
+        let (dir, _g) = aislar("gifquieto");
+        let src = escribir_gif(&dir, "fijo.gif", 1, 400);
+
+        let nombre = import(&src).unwrap();
+        assert!(nombre.ends_with(".png"), "{nombre}");
+        assert_eq!(image::open(resolve(&nombre)).unwrap().width(), 256);
+    }
+
+    #[test]
+    fn un_gif_que_pasa_del_tope_se_queda_en_el_primer_fotograma() {
+        // El tope existe porque un GIF animado entra con las dimensiones que traiga
+        // --no se puede reescalar sin recodificarlo-- y el webview lo decodifica en
+        // cada vuelta. Se prueba la decision sola para no fabricar dos megas.
+        assert_eq!(decidir(false, 12, MAX_GIF), Some("gif"));
+        assert_eq!(decidir(false, 12, MAX_GIF + 1), None);
+    }
+
+    #[test]
+    fn un_svg_embebido_en_un_perfil_llega_entero_al_otro_equipo() {
+        // Esto estaba roto: `import_bytes` solo sabia escribir PNG, asi que al
+        // importar un perfil exportado la imagen SVG se descartaba en silencio y la
+        // tecla llegaba sin icono.
+        let (_dir, _g) = aislar("svgbytes");
+        let contenido = br#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8"/></svg>"#;
+
+        let nombre = import_bytes(contenido).unwrap();
+        assert!(nombre.ends_with(".svg"), "{nombre}");
+        assert_eq!(fs::read(resolve(&nombre)).unwrap(), contenido);
+    }
+
+    #[test]
+    fn un_gif_embebido_en_un_perfil_llega_animado() {
+        let (dir, _g) = aislar("gifbytes");
+        let bytes = fs::read(escribir_gif(&dir, "late.gif", 3, 64)).unwrap();
+
+        let nombre = import_bytes(&bytes).unwrap();
+        assert!(nombre.ends_with(".gif"), "{nombre}");
+        assert_eq!(fs::read(resolve(&nombre)).unwrap(), bytes);
     }
 
     #[test]

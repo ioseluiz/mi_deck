@@ -113,6 +113,38 @@ function aviso(mensaje, tipo = "error") {
 // --------------------------------------------------------------------- pintar
 
 /** @param {"adelante" | "atras" | null} direccion */
+/** Si el panel se ve. Lo dice Rust, que es quien lo oculta y lo ensena. */
+let panelVisible = true;
+
+/** GIF de un pixel transparente: soltar el archivo es lo que para la animacion. */
+const IMAGEN_VACIA =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+/**
+ * Suelta o devuelve el archivo de las teclas con GIF animado.
+ *
+ * El webview sigue decodificando un GIF con la ventana oculta, y MiDeck vive en
+ * la bandeja: medido, quince teclas animadas costaban un 4,3 % de un nucleo sin
+ * que nadie las viera, contra un 0,4 % de suelo. No hay forma de pausar un GIF
+ * desde CSS ni desde el DOM, asi que se le quita el archivo y se le devuelve.
+ *
+ * La URL se guarda en el propio elemento y no en una tabla aparte: la rejilla se
+ * repinta entera a cada cambio y una tabla por identificador se quedaria vieja.
+ *
+ * @param {boolean} congelar
+ */
+function congelarAnimadas(congelar) {
+  for (const img of document.querySelectorAll("img.key-animada")) {
+    if (congelar) {
+      if (!img.dataset.viva) img.dataset.viva = img.src;
+      img.src = IMAGEN_VACIA;
+    } else if (img.dataset.viva) {
+      img.src = img.dataset.viva;
+      delete img.dataset.viva;
+    }
+  }
+}
+
 function pintar(direccion = null) {
   if (!nav) return;
   // Un menu abierto sobre una rejilla que acaba de cambiar apuntaria a teclas que
@@ -121,6 +153,9 @@ function pintar(direccion = null) {
 
   render($grid, nav, { rotas, urls, armada, vivo, caras });
   renderMigas($migas, nav);
+  // Repintar con el panel oculto devuelve imagenes nuevas y vivas: pasa de
+  // verdad, porque cambiar de aplicacion cambia de perfil aunque no se vea.
+  if (!panelVisible) congelarAnimadas(true);
 
   const paginas = nav.pageCount;
   $pager.hidden = paginas <= 1;
@@ -870,6 +905,16 @@ function conectarEdicion() {
     // por encima.
     desarmar();
   });
+
+  // Rust avisa al ocultar y al ensenar el panel, para poder parar los GIF que
+  // nadie esta mirando. Va en su propia llamada, como todas: `listen` devuelve
+  // una promesa, no la ventana.
+  ventana()
+    .listen("panel-visible", (ev) => {
+      panelVisible = ev?.payload !== false;
+      congelarAnimadas(!panelVisible);
+    })
+    .catch((e) => console.warn("[MiDeck] no se pudo escuchar panel-visible:", e));
 
   // El panel se repinta cuando el editor guarda algo en su propia ventana.
   ventana()

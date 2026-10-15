@@ -177,7 +177,11 @@ function pintarIcono(boton, urls) {
     return ICONOS[icon.name] ?? iconoPorAccion(boton.action);
   }
   if (url) {
-    return `<img src="${escapar(url)}" alt="" draggable="false">`;
+    // Se marca por el nombre del archivo en el modelo y no por la URL, que llega
+    // ya codificada por el protocolo asset:. La marca la usa `congelarAnimadas`
+    // para soltar el GIF cuando el panel no se ve.
+    const animada = /\.gif$/i.test(icon.file ?? "") ? ' class="key-animada"' : "";
+    return `<img src="${escapar(url)}"${animada} alt="" draggable="false">`;
   }
   // Sin archivo del que sacar icono: una URL recibe su pastilla y el resto,
   // el generico de su tipo de accion.

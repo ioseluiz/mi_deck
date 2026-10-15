@@ -788,6 +788,16 @@ async function elegirImagen() {
   });
   if (!ruta) return;
   const archivo = await invoke("import_image", { path: String(ruta) });
+  // Un GIF que entra y sale convertido en PNG perdio la animacion: o pasaba del
+  // tope de 2 MB, o solo tenia un fotograma. Sin decirlo, la tecla se queda
+  // quieta y no hay manera de averiguar por que.
+  if (/\.gif$/i.test(String(ruta)) && !/\.gif$/i.test(archivo)) {
+    error(
+      "El GIF se guardó quieto: o pasa de 2 MB, o tiene un solo fotograma. " +
+        "Para que se mueva, usa uno más ligero.",
+      "info"
+    );
+  }
   aplicarImagen(archivo);
 }
 

@@ -172,15 +172,44 @@ fn destino_para_icono(action: &Action) -> Option<PathBuf> {
 /// hilo propio devuelve Ok y no entrega nada.
 fn vigilar_estado_vivo(app: AppHandle) {
     let mut ultimo: HashMap<String, vivo::Valor> = HashMap::new();
+    let mut antes: Option<bool> = None;
+    let mut cuarto: u32 = 0;
 
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Se mira cuatro veces por segundo pero se trabaja una. Preguntar si la
+        // ventana se ve es una llamada a Windows que no toca nada; lo caro es lo
+        // de abajo, que sigue yendo al ritmo de siempre.
+        //
+        // Hace falta ese grano fino para devolver los GIF al descubrir el panel:
+        // con un segundo de margen, una tecla animada se veria vacia al abrirlo.
+        std::thread::sleep(std::time::Duration::from_millis(250));
 
         let visible = app
             .get_webview_window("main")
             .and_then(|w| w.is_visible().ok())
             .unwrap_or(false);
+
+        // Avisar de los cambios de visibilidad no cuesta nada nuevo: la lectura ya
+        // se hacia aqui para el freno de abajo.
+        //
+        // Lo necesita el panel para parar los GIF animados. El webview los sigue
+        // decodificando con la ventana oculta, y en un widget que vive en la
+        // bandeja eso es para siempre: medido, quince teclas animadas costaban un
+        // 4,3 % de un nucleo escondidas, contra un 0,4 % de suelo. Nadie las mira.
+        if antes != Some(visible) {
+            antes = Some(visible);
+            let emisor = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                let _ = emisor.emit("panel-visible", visible);
+            });
+        }
+
         if !visible {
+            continue;
+        }
+
+        cuarto = (cuarto + 1) % 4;
+        if cuarto != 0 {
             continue;
         }
 

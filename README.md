@@ -448,20 +448,60 @@ que se puede copiar a otro equipo.
 
 Al importar se reescala al lado mayor de 256 px manteniendo la proporción, sin
 recortar: el ajuste final lo hace `fit` en el CSS, de modo que cambiar de
-`contain` a `cover` no obliga a reimportar. Los SVG se copian sin rasterizar. El
-original se conserva en `icons\original\`.
+`contain` a `cover` no obliga a reimportar. El original se conserva en
+`icons\original\`.
 
-Mientras no exista el arrastrar y soltar de la fase 3:
+Dos formatos **no** se tocan, y se decide por el contenido y no por la extensión,
+porque quien renombra un `.gif` a `.png` no cambia lo que hay dentro:
+
+- **SVG**, porque el webview lo renderiza nativo y escala sin pérdida.
+- **GIF animado**, porque reescalarlo exigiría recodificar la animación entera.
+
+Un GIF de un solo fotograma es una imagen fija y pasa por el camino normal.
+
+También se puede importar desde la línea de órdenes, que imprime el nombre que va
+en `"icon": { "type": "image", "file": "..." }`:
 
 ```powershell
 cargo run --example importar_imagen -- "C:\ruta\logo.png"
 ```
 
-Imprime el nombre que hay que poner en `"icon": { "type": "image", "file": "..." }`.
+Al borrar un botón su imagen **no** se borra: un borrado automático convertiría un
+error de edición en una pérdida de trabajo. Limpiarlas es una acción explícita
+desde Ajustes.
 
-Al borrar un botón su imagen **no** se borra. Limpiarlas será una acción explícita
-desde Ajustes (fase 3): un borrado automático convertiría un error de edición en
-una pérdida de trabajo.
+### GIF animados, y el freno que necesitan
+
+Una tecla puede llevar un GIF animado. No hace falta nada en el panel para que se
+mueva: es un `<img>` y lo anima WebView2.
+
+El tope es de **2 MB**. Un GIF animado entra con el tamaño y las dimensiones que
+traiga —no se puede reescalar sin recodificarlo— y el webview lo decodifica en cada
+vuelta aunque la tecla mida 96 px. Por encima del tope se guarda el primer
+fotograma, y el editor lo dice en vez de devolver una tecla quieta sin explicación.
+
+Lo que obligó a poner un freno fue esto, medido en un equipo de 24 núcleos con
+quince teclas animadas, cada una con su propio GIF de 400×400 y 30 fotogramas:
+
+| Situación | CPU (de un núcleo) |
+|---|---|
+| Panel sin GIF, de referencia | 0,4 % |
+| Quince teclas animadas, a la vista | 3,7 – 10,4 % |
+| Quince teclas animadas, **oculto en la bandeja** | 4,3 % |
+| Quince teclas animadas, oculto, **con el freno** | 0,55 % |
+
+El dato que importa es el tercero: **el webview no deja de animar porque la ventana
+no se vea**, y MiDeck vive en la bandeja. Ese 4,3 % se pagaría todo el día sin que
+nadie lo mirara. Como no hay forma de pausar un GIF desde CSS ni desde el DOM, al
+ocultarse se le quita el archivo al `<img>` y al volver se le devuelve.
+
+El aviso lo da el mismo latido que ya mira la visibilidad para el estado vivo, así
+que enterarse no cuesta nada nuevo. Mira cuatro veces por segundo en vez de una
+—medido, el suelo no se movió— porque con un segundo de margen una tecla animada se
+vería vacía al abrir el panel.
+
+El margen de la fila «a la vista» es ancho porque Windows reduce el trabajo cuando
+la ventana queda tapada por otra, y eso no se controla desde aquí.
 
 ### Íconos automáticos
 
