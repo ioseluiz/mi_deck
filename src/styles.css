@@ -657,3 +657,92 @@ body {
   transform: rotate(-20deg);
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------- buscador */
+
+/* Encima de la rejilla y no en la barra: el panel mide cinco teclas de ancho y
+   una caja fija ahi robaria sitio a lo que se usa a diario. Se abre con Ctrl+F,
+   se cierra con Escape, y mientras tanto no existe. */
+#buscador {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--fondo);
+}
+
+#buscador[hidden] {
+  display: none;
+}
+
+#buscador-texto {
+  flex: 0 0 auto;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--texto);
+  background: var(--vacia);
+  border: 1px solid var(--borde-tecla);
+  border-radius: 7px;
+}
+
+#buscador-texto:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+#buscador-lista {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hallazgo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  font: inherit;
+  color: var(--texto);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.hallazgo:hover,
+.hallazgo[aria-selected="true"] {
+  background: var(--tecla-activa);
+  border-color: var(--acento);
+}
+
+.hallazgo-nombre {
+  font-size: 13px;
+}
+
+/* La ruta y el destino son la explicacion de por que sale el resultado, no el
+   resultado: se leen, pero no compiten con el nombre. */
+.hallazgo-ruta {
+  font-size: 11px;
+  color: var(--texto-tenue);
+}
+
+.buscador-vacio {
+  padding: 10px 9px;
+  font-size: 12px;
+  color: var(--texto-tenue);
+}
+
+/* La tecla a la que acaba de saltar la busqueda, para no tener que buscarla otra
+   vez con la vista entre quince iguales. */
+.key--hallada {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}

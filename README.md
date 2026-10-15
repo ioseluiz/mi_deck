@@ -116,6 +116,7 @@ cargo fmt -- --check
 | Tecla **Volver** (celda 0), `Backspace`, clic central, botón atrás del ratón | Sube un nivel |
 | Clic en una miga de pan | Salta directo a ese nivel |
 | Rueda sobre la rejilla, `Ctrl+Tab` | Cambia de página |
+| `Ctrl+F` | Busca una tecla en todo el deck |
 | `Ctrl+E` | Abre `deck.json` en el editor predeterminado |
 | `F5` | Relee `deck.json` del disco sin reiniciar |
 | Botón **menú** de la barra de título | Nueva tecla, nueva carpeta, páginas, ajustes, abrir `deck.json`, recargar |
@@ -1075,6 +1076,29 @@ La detección es **por ejecutable**, y eso es de Windows, no de MiDeck: `javaw.e
 `python.exe` o un navegador con varios perfiles son el mismo programa para el
 sistema y no se pueden distinguir entre sí. Afinar por título de ventana sería
 aditivo si algún día estorba.
+
+## Buscar una tecla
+
+`Ctrl+F`, o *Buscar una tecla…* en el menú. Busca por el **nombre** de la tecla
+y por **lo que abre**, en todo el deck: la raíz, todas las carpetas por dentro y
+también los paneles de los perfiles, que son árboles aparte y no cuelgan de la
+raíz. Elegir un resultado se planta en su carpeta, en su página, y señala la
+tecla unos segundos.
+
+Hace falta en cuanto hay carpetas dentro de carpetas: el panel enseña quince
+teclas de un nivel, y lo demás no está en pantalla. Sin esto, encontrar algo es
+abrir carpetas a ciegas.
+
+Sin distinguir mayúsculas ni acentos: quien escribe `camara` encuentra
+*Cámara mensual*, porque tecleando deprisa nadie pone la tilde. Los resultados
+se ordenan poniendo primero las teclas cuyo nombre **empieza** por lo escrito,
+después el resto de nombres, y al final las que solo encajan por su destino —de
+esas se dice cuál es, porque el destino no se ve en la tecla y si no el
+resultado parecería aparecido de la nada.
+
+Una macro se encuentra por lo que hacen sus pasos, que es lo que de verdad
+hace. La búsqueda la resuelve Rust, que es quien conoce el deck entero, con un
+respiro de 120 ms para no recorrerlo una vez por tecla pulsada.
 
 ## Copia de seguridad del deck
 

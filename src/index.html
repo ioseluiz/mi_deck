@@ -62,6 +62,17 @@
         </button>
       </footer>
 
+      <div id="buscador" hidden>
+        <input
+          id="buscador-texto"
+          type="search"
+          placeholder="Buscar una tecla…"
+          aria-label="Buscar una tecla en todo el deck"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <ul id="buscador-lista" role="listbox" aria-label="Resultados"></ul>
+      </div>
       <div id="toast" role="status" aria-live="polite" hidden></div>
       <div id="ctxmenu" role="menu" hidden></div>
     </div>

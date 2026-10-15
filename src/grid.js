@@ -294,6 +294,10 @@ export function render(contenedor, nav, ctx) {
     const armada = ctx.armada === b.id;
     if (armada) clases.push("key--armada");
 
+    // Recien encontrada por la busqueda. Solo un contorno y solo unos segundos:
+    // es una ayuda para dar con ella entre quince iguales, no un estado.
+    if (ctx.hallada === b.id) clases.push("key--hallada");
+
     const fondo = icon.background
       ? ` style="background:${escapar(icon.background)}"`
       : "";

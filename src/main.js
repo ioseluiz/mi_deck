@@ -19,6 +19,8 @@ import { render, renderMigas, setCatalogoSistema } from "./grid.js";
 import { abrirMenu, cerrar as cerrarMenu, estaAbierto as menuAbierto } from "./menu.js";
 import { conectarSoltarArchivos, conectarReordenar, huboArrastre } from "./dnd.js";
 
+/** @param {string} id */
+const $ = (id) => /** @type {any} */ (document.getElementById(id));
 const $grid = /** @type {HTMLElement} */ (document.getElementById("grid"));
 const $migas = /** @type {HTMLElement} */ (document.getElementById("breadcrumbs"));
 const $pager = /** @type {HTMLElement} */ (document.getElementById("pager"));
@@ -110,9 +112,123 @@ function aviso(mensaje, tipo = "error") {
   }, tipo === "error" ? 6000 : 4000);
 }
 
-// --------------------------------------------------------------------- pintar
+// ------------------------------------------------------------- buscador
 
-/** @param {"adelante" | "atras" | null} direccion */
+/** @type {any[]} */
+let hallazgos = [];
+/** Cual esta marcado para abrirse con Enter. */
+let hallazgoActivo = 0;
+/** Tecla a la que acaba de saltar la busqueda, para senalarla al pintar. */
+let teclaHallada = null;
+let temporizadorBusqueda = null;
+
+function buscadorAbierto() {
+  return !$("buscador").hidden;
+}
+
+function abrirBuscador() {
+  const caja = $("buscador");
+  if (!caja.hidden) return;
+  cerrarMenu();
+  caja.hidden = false;
+  const texto = $("buscador-texto");
+  texto.value = "";
+  pintarHallazgos([]);
+  texto.focus();
+}
+
+function cerrarBuscador() {
+  $("buscador").hidden = true;
+  hallazgos = [];
+  clearTimeout(temporizadorBusqueda);
+}
+
+/**
+ * Pide los resultados a Rust, que es quien conoce el deck entero.
+ *
+ * Con un respiro de 120 ms: escribir «informe» son siete pulsaciones y siete
+ * recorridos del deck, y el ultimo es el unico que se ve.
+ */
+function buscarConRespiro() {
+  clearTimeout(temporizadorBusqueda);
+  temporizadorBusqueda = setTimeout(async () => {
+    const q = $("buscador-texto").value;
+    try {
+      pintarHallazgos(q.trim() ? await invoke("search_keys", { q }) : []);
+    } catch (e) {
+      console.warn("[MiDeck] no se pudo buscar:", e);
+    }
+  }, 120);
+}
+
+function pintarHallazgos(lista) {
+  hallazgos = lista ?? [];
+  hallazgoActivo = 0;
+  const ul = $("buscador-lista");
+
+  if (!hallazgos.length) {
+    const escrito = $("buscador-texto").value.trim();
+    ul.innerHTML = escrito
+      ? `<li class="buscador-vacio">Ninguna tecla coincide con «${escaparHtml(escrito)}».</li>`
+      : `<li class="buscador-vacio">Escribe para buscar por nombre o por lo que abre la tecla.</li>`;
+    return;
+  }
+
+  ul.innerHTML = hallazgos
+    .map((h, i) => {
+      // La ruta siempre; el destino solo cuando es la razon de que salga, porque
+      // si no el resultado parece aparecido de la nada.
+      const pie = h.detalle ? `${h.ruta} · abre ${h.detalle}` : h.ruta;
+      return (
+        `<li role="option" aria-selected="${i === 0}">` +
+        `<button type="button" class="hallazgo" data-i="${i}" aria-selected="${i === 0}">` +
+        `<span class="hallazgo-nombre">${escaparHtml(h.label || "(sin nombre)")}</span>` +
+        `<span class="hallazgo-ruta">${escaparHtml(pie)}</span>` +
+        `</button></li>`
+      );
+    })
+    .join("");
+}
+
+function marcarHallazgo(delta) {
+  if (!hallazgos.length) return;
+  hallazgoActivo = (hallazgoActivo + delta + hallazgos.length) % hallazgos.length;
+  for (const b of $("buscador-lista").querySelectorAll(".hallazgo")) {
+    const suyo = Number(b.dataset.i) === hallazgoActivo;
+    b.setAttribute("aria-selected", String(suyo));
+    b.parentElement?.setAttribute("aria-selected", String(suyo));
+    if (suyo) b.scrollIntoView({ block: "nearest" });
+  }
+}
+
+/** Se planta donde vive la tecla y la senala. */
+function irAlHallazgo(i) {
+  const h = hallazgos[i];
+  if (!h) return;
+  cerrarBuscador();
+  if (!nav?.irA(h.camino, h.page)) {
+    aviso("Esa tecla ya no está donde estaba.", "info");
+    return;
+  }
+  teclaHallada = h.button_id;
+  pintar();
+  pintarAncla();
+  // Se quita sola: es una ayuda para encontrarla con la vista, no un estado.
+  setTimeout(() => {
+    if (teclaHallada === h.button_id) {
+      teclaHallada = null;
+      pintar();
+    }
+  }, 2500);
+}
+
+function escaparHtml(s) {
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}
+
 /** Si el panel se ve. Lo dice Rust, que es quien lo oculta y lo ensena. */
 let panelVisible = true;
 
@@ -145,13 +261,16 @@ function congelarAnimadas(congelar) {
   }
 }
 
+// --------------------------------------------------------------------- pintar
+
+/** @param {"adelante" | "atras" | null} direccion */
 function pintar(direccion = null) {
   if (!nav) return;
   // Un menu abierto sobre una rejilla que acaba de cambiar apuntaria a teclas que
   // ya no estan donde estaban.
   cerrarMenu();
 
-  render($grid, nav, { rotas, urls, armada, vivo, caras });
+  render($grid, nav, { rotas, urls, armada, vivo, caras, hallada: teclaHallada });
   renderMigas($migas, nav);
   // Repintar con el panel oculto devuelve imagenes nuevas y vivas: pasa de
   // verdad, porque cambiar de aplicacion cambia de perfil aunque no se vea.
@@ -552,7 +671,26 @@ function conectarEventos() {
 
   // Volver es la accion mas frecuente: tres atajos redundantes a proposito.
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Backspace") {
+    // El buscador se queda con el teclado mientras esta abierto: si no,
+    // escribir «back» en la caja dispararia Backspace y navegaria por detras.
+    if (buscadorAbierto()) {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        cerrarBuscador();
+      } else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+        ev.preventDefault();
+        marcarHallazgo(ev.key === "ArrowDown" ? 1 : -1);
+      } else if (ev.key === "Enter") {
+        ev.preventDefault();
+        irAlHallazgo(hallazgoActivo);
+      }
+      return;
+    }
+
+    if (ev.key.toLowerCase() === "f" && ev.ctrlKey) {
+      ev.preventDefault();
+      abrirBuscador();
+    } else if (ev.key === "Backspace") {
       ev.preventDefault();
       volver();
     } else if (ev.key === "Tab" && ev.ctrlKey) {
@@ -635,6 +773,10 @@ function conectarEventos() {
         desactivado: !perfilActivo.surface,
         accion: () => alternarAncla(),
       },
+      { separador: true },
+      // Tambien en el menu y no solo en Ctrl+F: un atajo que no esta escrito en
+      // ningun sitio no existe para quien no lee el README.
+      { label: "Buscar una tecla…  Ctrl+F", accion: () => abrirBuscador() },
       { separador: true },
       { label: "Ajustes…", accion: () => abrirEditor("ajustes", null, 0) },
       { label: "Abrir deck.json", accion: () => invoke("open_config_file") },
@@ -904,6 +1046,12 @@ function conectarEdicion() {
     // tecla armada esperando es pedir un accidente la proxima vez que se pase
     // por encima.
     desarmar();
+  });
+
+  $("buscador-texto")?.addEventListener("input", buscarConRespiro);
+  $("buscador-lista")?.addEventListener("click", (ev) => {
+    const boton = ev.target?.closest?.(".hallazgo");
+    if (boton) irAlHallazgo(Number(boton.dataset.i));
   });
 
   // Rust avisa al ocultar y al ensenar el panel, para poder parar los GIF que

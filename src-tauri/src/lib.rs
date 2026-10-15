@@ -6,6 +6,7 @@
 
 pub mod apps;
 pub mod audio;
+pub mod buscar;
 pub mod burbuja;
 pub mod captura;
 pub mod edit;
@@ -926,6 +927,15 @@ fn import_profile(path: String, state: State<AppState>) -> Result<DeckView, Stri
     mutar(&state, |d| {
         intercambio::importar(d, &paquete, |bytes| images::import_bytes(bytes).ok()).map(|_| ())
     })
+}
+
+/// Busca teclas por etiqueta o por destino, en todo el deck.
+///
+/// El tope es de veinte: una lista mas larga no cabe en el panel y nadie la lee.
+#[tauri::command]
+fn search_keys(q: String, state: State<AppState>) -> Vec<buscar::Hallazgo> {
+    let deck = state.deck.lock().unwrap();
+    buscar::buscar(&deck, &q, 20)
 }
 
 // ------------------------------------------------- copia de seguridad entera
@@ -1869,6 +1879,7 @@ pub fn run() {
             export_backup,
             export_backup_filename,
             import_backup,
+            search_keys,
             add_profile_exe,
             remove_profile_exe,
             icon_for_target,

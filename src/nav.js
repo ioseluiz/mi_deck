@@ -94,6 +94,30 @@ export class Nav {
     return true;
   }
 
+  /**
+   * Se planta en una superficie concreta siguiendo un camino ya calculado.
+   *
+   * Lo usa la busqueda: lo que encuentra puede estar tres carpetas adentro, y
+   * entrar una por una desde fuera exigiria saber por donde. El camino lo da
+   * Rust, que es quien recorrio el deck.
+   *
+   * La base pasa a ser el primer paso del camino: si el resultado vive en el
+   * panel de un perfil, ir alli es salirse del arbol en el que estabas, y las
+   * migas tienen que empezar donde empieza de verdad.
+   *
+   * @param {string[]} camino  superficies, de la raiz al destino
+   * @param {number} pagina
+   * @returns {boolean} si se pudo ir
+   */
+  irA(camino, pagina = 0) {
+    if (!Array.isArray(camino) || camino.length === 0) return false;
+    if (!camino.every((id) => this.deck.surfaces[id])) return false;
+    this.base = camino[0];
+    this.stack = [...camino];
+    this.page = Math.max(0, Math.min(pagina, this.pageCount - 1));
+    return true;
+  }
+
   /** @returns {boolean} si habia a donde volver */
   back() {
     if (this.stack.length <= 1) return false;

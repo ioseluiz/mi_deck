@@ -48,6 +48,15 @@ EXIGENCIAS = [
     # El aviso de arranque roto: se lee sobre su propio fondo y su borde se ve
     # sobre el panel. Es lo unico que queda en pantalla cuando nada funciona.
     ("texto de arranque roto sobre su fondo", "#ffd9dc", "#2a1d1f", 4.5),
+    # El buscador tapa la rejilla entera, asi que todo lo suyo se lee sobre el
+    # fondo del panel. La ruta de un resultado es texto de apoyo, pero texto:
+    # 4.5:1, no 3:1.
+    ("texto del buscador sobre su caja", "--texto", "--vacia", 4.5),
+    ("ruta de un resultado sobre el panel", "--texto-tenue", "--fondo", 4.5),
+    # El resultado marcado y la tecla recien hallada se senalan con el acento:
+    # son graficos de interfaz (WCAG 1.4.11).
+    ("resultado marcado sobre el panel", "--acento", "--fondo", 3.0),
+    ("contorno de tecla hallada sobre la tecla", "--acento", "--tecla", 3.0),
     ("borde de arranque roto sobre el panel", "#9a4a53", "--fondo", 3.0),
     # La burbuja flotante vive sobre lo que sea: su fondo no se puede comprobar
     # contra nada fijo. Lo que si tiene que cumplir es que su icono se distinga
